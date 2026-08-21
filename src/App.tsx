@@ -146,6 +146,15 @@ export default function App() {
   /* ── model download (§3) ──────────────────────────────────────────────────── */
   async function startDownload() {
     setError("");
+    // Re-read before starting. The boot-time snapshot can be stale by now (a file may have
+    // arrived by other means), and rows for files that are already present would otherwise
+    // sit at "queued" for the whole run while only the missing ones move, which reads as a
+    // stall rather than as a skip.
+    try {
+      setModels(await invoke<ModelStatus>("model_status"));
+    } catch {
+      /* fall through to the download, which re-checks the filesystem itself */
+    }
     setDlDone(new Set());
     setCancelling(false);
     lastDlKey.current = "";
@@ -350,9 +359,10 @@ export default function App() {
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               <div className="ph-setuptitle">One-time setup</div>
               <div className="ph-setupbody">
-                Phosphor runs entirely on your GPU. It needs to download its models once —
-                about {gb(models.files.reduce((s, f) => s + f.bytes, 0))} from Hugging Face.
-                Nothing ever leaves your machine.
+                Phosphor runs entirely on your GPU. It needs to download its models and
+                inference runtime once, about{" "}
+                {gb(models.files.reduce((s, f) => s + f.bytes, 0))} in total. Nothing you
+                make ever leaves your machine.
               </div>
             </div>
 

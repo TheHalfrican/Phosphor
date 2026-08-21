@@ -191,7 +191,15 @@ fn manifest_and_root(app: &AppHandle) -> CmdResult<(models::Manifest, PathBuf)> 
     } else {
         app.path().resource_dir().map_err(err)?.join("assets").join("models.json")
     };
-    let manifest = models::Manifest::load(&manifest_path).map_err(err)?;
+    let mut manifest = models::Manifest::load(&manifest_path).map_err(err)?;
+
+    // The frozen sidecar is a release-only artifact: in dev `sidecar_command` runs
+    // inference_server.py through the project venv, so downloading and unpacking a 2 GB
+    // freeze into the repo would be pure waste. Without this, first run in dev sits on the
+    // setup screen asking for a runtime it is never going to use.
+    if cfg!(debug_assertions) {
+        manifest.files.retain(|f| f.unpack_to.is_none());
+    }
 
     // In dev the models live in the repo, not app-data — that is where setup.ps1 and the
     // tools/ scripts already put them, and re-downloading 7 GB to a second location just

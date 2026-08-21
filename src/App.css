@@ -82,15 +82,27 @@ body { overflow: hidden; user-select: none; }
 .ph-status .right { margin-left: auto; }
 
 /* ── main (1a) ─────────────────────────────────────────────────────────────── */
-.ph-main { display: flex; flex-direction: column; gap: 14px; padding: 18px 18px 16px; }
+.ph-main {
+  display: flex; flex-direction: column; gap: 14px; padding: 18px 18px 16px;
+  flex: 1; min-height: 0;
+  /* Capped and centred: stretched across a fullscreen TV this composition would have
+     unreadable line lengths. */
+  width: 100%; max-width: 720px; margin-inline: auto;
+}
 
 .ph-stage {
   display: grid; place-items: center; padding: 16px 0 6px;
+  /* Takes the slack, so the cover grows with the window and the controls below keep
+     their natural size. min-height:0 lets it shrink again on a short window. */
+  flex: 1; min-height: 0;
   background: radial-gradient(70% 90% at 50% 45%,
     color-mix(in srgb, var(--color-accent) 6%, transparent), transparent 72%);
 }
 .ph-cover {
-  width: 216px; border-radius: var(--radius-md); overflow: hidden;
+  /* Height-driven; the inline aspect-ratio derives the width. The max-* pair takes over
+     when the window is wide but short, so the cover never overflows its stage. */
+  height: 100%; width: auto; max-height: 100%; max-width: 100%;
+  border-radius: var(--radius-md); overflow: hidden;
   position: relative; box-shadow: var(--shadow-lg); background: var(--color-surface);
 }
 .ph-cover img { width: 100%; height: 100%; object-fit: cover; }
@@ -136,7 +148,11 @@ body { overflow: hidden; user-select: none; }
 .ph-protnote { margin-left: auto; font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
 
 /* ── empty state (1c) ──────────────────────────────────────────────────────── */
-.ph-empty { padding: 22px 20px 20px; height: 100%; }
+.ph-empty {
+  padding: 22px 20px 20px; height: 100%;
+  flex: 1; min-height: 0;
+  width: 100%; max-width: 720px; margin-inline: auto;
+}
 /* The design sizes the card to its content; in a real fixed-size window the drop
    target should own the whole body instead of leaving dead space beneath it. */
 .ph-body { display: flex; flex-direction: column; }
@@ -174,7 +190,16 @@ body { overflow: hidden; user-select: none; }
 .ph-dropsub { font-size: 11.5px; line-height: 1.5; color: color-mix(in srgb, var(--color-text) 50%, transparent); max-width: 260px; }
 
 /* ── generating (1e) ───────────────────────────────────────────────────────── */
-.ph-gen { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 26px 20px 22px; }
+.ph-gen {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 26px 20px 22px;
+  flex: 1; min-height: 0;
+  width: 100%; max-width: 720px; margin-inline: auto;
+}
+/* The cover takes the slack here rather than sizing itself. Without a definite height on
+   this child, `height: 100%` on .ph-cover resolves to auto and the aspect-ratio box
+   expands to the full width of the window, which is what "blew up huge" looked like. */
+.ph-gen > .ph-cover { flex: 1; min-height: 0; }
 .ph-progwrap { width: 300px; display: flex; flex-direction: column; gap: 7px; }
 .ph-progtop, .ph-progbot { display: flex; justify-content: space-between; }
 .ph-progtop { font-size: 11px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
@@ -188,10 +213,18 @@ body { overflow: hidden; user-select: none; }
 }
 
 /* ── mask editor (1d) ──────────────────────────────────────────────────────── */
-.ph-mask { display: grid; grid-template-columns: 1fr 148px; gap: 14px; padding: 16px 16px 14px; }
-.ph-maskstage { display: grid; place-items: center; }
+.ph-mask {
+  display: grid; grid-template-columns: minmax(0, 1fr) 148px; gap: 14px;
+  padding: 16px 16px 14px;
+  flex: 1; min-height: 0;
+  width: 100%; max-width: 900px; margin-inline: auto;
+}
+.ph-maskstage { display: grid; place-items: center; min-height: 0; min-width: 0; }
 .ph-maskcanvas {
-  width: 252px; border-radius: var(--radius-md); overflow: hidden; position: relative;
+  /* Same height-driven sizing as .ph-cover. This is the screen where scale matters most:
+     the mask is edited by hand, and a 252px preview made that needlessly fiddly. */
+  height: 100%; width: auto; max-height: 100%; max-width: 100%;
+  border-radius: var(--radius-md); overflow: hidden; position: relative;
   box-shadow: var(--shadow-md); background: var(--color-surface); touch-action: none;
 }
 .ph-maskcanvas img { width: 100%; display: block; }
@@ -201,11 +234,20 @@ body { overflow: hidden; user-select: none; }
      artwork beneath stays readable while editing. */
   opacity: 0.55; mix-blend-mode: screen;
 }
-.ph-masktools { display: flex; flex-direction: column; gap: 12px; }
+/* Also min-width:0, for the same reason one level up: a grid item defaults to
+   min-width:auto and would otherwise be sized by its widest child rather than by the
+   148px track. */
+.ph-masktools { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ph-toolgroup { display: flex; flex-direction: column; gap: 6px; }
 .ph-toollabel { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent); }
 .ph-slider { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
-.ph-slider input { flex: 1; accent-color: var(--color-accent); height: 3px; }
+.ph-slider input {
+  flex: 1; accent-color: var(--color-accent); height: 3px;
+  /* min-width:0 is load-bearing. A range input has an intrinsic width of ~130-170px, and
+     a flex item will not shrink below its automatic minimum size, so `flex: 1` alone left
+     both sliders overflowing the 148px tool column and clipping off the window edge. */
+  min-width: 0; width: 100%;
+}
 .ph-maskstats { margin-top: auto; display: flex; flex-direction: column; gap: 6px; font-size: 10px; color: color-mix(in srgb, var(--color-text) 45%, transparent); }
 .ph-maskfoot { display: flex; align-items: center; gap: 10px; padding: 11px 16px 13px; border-top: 1px solid rgba(255, 255, 255, 0.05); }
 .ph-maskwarn { margin-left: auto; font-size: 10px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
@@ -230,7 +272,12 @@ body { overflow: hidden; user-select: none; }
 .ph-fmt .size.warn { color: #e3b34c; }
 
 /* ── first-run download (1g) ───────────────────────────────────────────────── */
-.ph-setup { display: flex; flex-direction: column; gap: 18px; padding: 30px 34px 26px; }
+.ph-setup {
+  display: flex; flex-direction: column; gap: 18px; padding: 30px 34px 26px;
+  /* Centred rather than stranded at the top of a tall window. */
+  flex: 1; min-height: 0; justify-content: center;
+  width: 100%; max-width: 560px; margin-inline: auto;
+}
 .ph-setuptitle { font-family: var(--font-heading); font-size: 17px; }
 .ph-setupbody { font-size: 12px; line-height: 1.55; color: color-mix(in srgb, var(--color-text) 55%, transparent); text-wrap: pretty; }
 .ph-dlrow { display: flex; flex-direction: column; gap: 6px; }
@@ -248,7 +295,10 @@ body { overflow: hidden; user-select: none; }
 }
 
 /* ── settings (1h) ─────────────────────────────────────────────────────────── */
-.ph-settings { display: flex; flex-direction: column; gap: 20px; padding: 20px 24px 22px; }
+.ph-settings {
+  display: flex; flex-direction: column; gap: 20px; padding: 20px 24px 22px;
+  width: 100%; max-width: 620px; margin-inline: auto;
+}
 .ph-setgroup { display: flex; flex-direction: column; gap: 10px; }
 .ph-setrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ph-setrow .label { display: flex; flex-direction: column; gap: 2px; }

@@ -45,6 +45,14 @@ export function MaskEditor({
     const ctx = c.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
     const img = new Image();
+    // REQUIRED, and its absence fails silently. The mask is served over the asset
+    // protocol, a different origin from the app, so without this the canvas is tainted
+    // the moment it is drawn to. Drawing still works - the overlay looks perfect - but
+    // getImageData() and toDataURL() both throw SecurityError, which killed measure()
+    // before it set any state and made Done unable to export the mask at all. Tauri does
+    // send Access-Control-Allow-Origin on this protocol (tauri/src/protocol/asset.rs), so
+    // requesting CORS is all that was missing.
+    img.crossOrigin = "anonymous";
     img.onload = () => {
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
@@ -65,7 +73,12 @@ export function MaskEditor({
     let on = 0, n = 0;
     for (let y = 0; y < height; y += step) {
       for (let x = 0; x < width; x += step) {
-        if (d[(y * width + x) * 4 + 3] > 40) on++;
+        // Luminance AND alpha. CRAFT's mask arrives as an opaque greyscale PNG, so alpha
+        // alone reads 255 everywhere and would report 100% coverage on every cover.
+        // Brush strokes are opaque white and erases zero both, so the pair is correct for
+        // detected, painted and erased pixels alike.
+        const i = (y * width + x) * 4;
+        if (d[i] > 40 && d[i + 3] > 40) on++;
         n++;
       }
     }
@@ -77,7 +90,8 @@ export function MaskEditor({
     for (let y = 0; y < height; y += step) {
       let any = false;
       for (let x = 0; x < width; x += step) {
-        if (d[(y * width + x) * 4 + 3] > 40) { any = true; break; }
+        const i = (y * width + x) * 4;
+        if (d[i] > 40 && d[i + 3] > 40) { any = true; break; }
       }
       if (any && !inBand) bands++;
       inBand = any;
