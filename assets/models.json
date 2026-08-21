@@ -1,6 +1,6 @@
 {
   "_comment": "First-run download manifest (CLAUDE.md \u00a73). Weights are NOT shipped in the installer: keeps it small and keeps Apache-2.0 model licensing separate from app distribution. SHA256 computed from verified-working local copies on 2026-08-20. The sidecar entry is an archive: it is unpacked into app data after its checksum passes, and tracked by a marker file rather than by the archive, which is deleted afterwards.",
-  "total_bytes": 9173605950,
+  "total_bytes": 9173605972,
   "files": [
     {
       "key": "transformer",
@@ -55,13 +55,22 @@
       "note": "CRAFT scene-text detector (MIT). Used for the text-protection mask."
     },
     {
-      "key": "sidecar",
-      "path": "sidecar/phosphor-sidecar.zip",
-      "url": "https://huggingface.co/TheHalfrican/phosphor-sidecar/resolve/main/phosphor-sidecar.zip",
-      "bytes": 2059988617,
-      "sha256": "d309f53877865e4d385b5a7d388fbcba97b78ab0d9b4a54829d5a98c5331e8d4",
+      "key": "sidecar-part1",
+      "path": "sidecar/phosphor-sidecar-1of2.zip",
+      "url": "https://github.com/TheHalfrican/Phosphor/releases/download/v0.1.0/phosphor-sidecar-1of2.zip",
+      "bytes": 1064183817,
+      "sha256": "ab05c00b1b652c4f8d104a3c400c3987a4989ab507b266c00c87ff97cde60853",
       "unpack_to": "sidecar",
-      "note": "Frozen Python inference sidecar (torch + CUDA). 2.88 GB unpacked, which no Windows installer format can carry - NSIS fails at the 1.96 GB signed-32-bit boundary and WiX packs into CAB with the same ceiling. Downloaded and unpacked on first run instead. NOT YET UPLOADED: the url above is the intended location; publish the archive from tools/package_sidecar.py there."
+      "note": "Frozen Python inference sidecar, part 1 of 2 (torch + CUDA). Too large for any Windows installer format, so it is downloaded and unpacked on first run. Each part is an independent zip extracting into the same directory."
+    },
+    {
+      "key": "sidecar-part2",
+      "path": "sidecar/phosphor-sidecar-2of2.zip",
+      "url": "https://github.com/TheHalfrican/Phosphor/releases/download/v0.1.0/phosphor-sidecar-2of2.zip",
+      "bytes": 995804822,
+      "sha256": "73369d57095ab8be62070e49ec84d5ac5ab765d36801bb1984dfccba5fc65b6d",
+      "unpack_to": "sidecar",
+      "note": "Frozen Python inference sidecar, part 2 of 2 (torch + CUDA). Too large for any Windows installer format, so it is downloaded and unpacked on first run. Each part is an independent zip extracting into the same directory."
     }
   ]
 }

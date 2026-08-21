@@ -1008,6 +1008,41 @@ mod tests {
         std::fs::remove_dir_all(&root).ok();
     }
 
+    #[test]
+    fn split_parts_sharing_one_directory_are_tracked_separately() {
+        // The sidecar ships as two archives that extract into the same directory, because
+        // GitHub Releases caps an asset at 2 GiB. Their markers must not collide, or one
+        // part landing would mark the whole thing installed.
+        let root = tmp_root("split");
+        let mut a = small_file();
+        a.key = "sidecar-part1".into();
+        a.path = "sidecar/part1.zip".into();
+        a.unpack_to = Some("sidecar".into());
+
+        let mut b = a.clone();
+        b.key = "sidecar-part2".into();
+        b.path = "sidecar/part2.zip".into();
+        b.sha256 = "1111111111111111111111111111111111111111111111111111111111111111".into();
+
+        let m = manifest_of(vec![a.clone(), b.clone()]);
+        let dir = root.join("sidecar");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Only part 1 extracted: not complete.
+        std::fs::write(dir.join(".phosphor-sidecar-part1.sha256"), format!("{}
+", a.sha256)).unwrap();
+        let st = m.status(&root);
+        assert!(!st.complete);
+        assert!(st.files[0].present && !st.files[1].present);
+
+        // Both extracted: complete.
+        std::fs::write(dir.join(".phosphor-sidecar-part2.sha256"), format!("{}
+", b.sha256)).unwrap();
+        assert!(m.status(&root).complete);
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
     #[tokio::test]
     async fn cancelling_before_the_first_byte_leaves_nothing_published() {
         let root = tmp_root("cancel");

@@ -782,27 +782,44 @@ into the user's app data.
 The frozen sidecar therefore lives at `<appdata>/sidecar/phosphor-sidecar.exe`, not in the
 install directory, and `bundled_binary()` looks there.
 
-### The one thing left: host the archive
+### The one thing left: upload the two archives
 
-`assets/models.json` points the `sidecar` entry at
+Hosting is **GitHub Releases**, split into two parts:
 
-```
-https://huggingface.co/TheHalfrican/phosphor-sidecar/resolve/main/phosphor-sidecar.zip
-```
+| part | size | |
+|---|---|---|
+| `phosphor-sidecar-1of2.zip` | 1.06 GB (0.99 GiB) | |
+| `phosphor-sidecar-2of2.zip` | 1.00 GB (0.93 GiB) | |
 
-**which does not exist yet.** Until that archive is uploaded, first run downloads the models
-fine and then fails on the sidecar with a legible 404. Build and publish it with:
+**Not Hugging Face**, despite the downloader already pointing there for models. HF's free
+public storage is "best-effort" and explicitly conditioned on uploads being "as useful to
+the community as possible" — meant for models and datasets. A PyInstaller bundle of torch
+and CUDA DLLs is a Windows application payload, not a community ML artifact, so hosting it
+there is outside what that storage is for.
+
+**Why two parts and not one.** GitHub caps a release asset at 2 GiB. The single archive was
+1.92 GiB — under the cap with ~83 MiB to spare, which one torch update would erase. Each
+part is a *complete, independent* zip rather than a byte-split, so the downloader verifies,
+resumes and retries each on its own; both declare `unpack_to: "sidecar"` and extract into
+the same directory. That needed no new code, only distinct keys, since the marker file is
+named per key. There is a test pinning exactly that.
+
+Verified: the two parts reassemble to all 5838 files with matching sizes, and the seven
+largest binaries hash identically to the source tree.
+
+To publish:
 
 ```powershell
-./tools/build_sidecar.ps1                      # -> sidecar-dist/phosphor-sidecar/
-.venv/Scripts/python.exe tools/package_sidecar.py   # -> the .zip, size and sha256
+./tools/build_sidecar.ps1                                        # -> sidecar-dist/phosphor-sidecar/
+.venv/Scripts/python.exe tools/package_sidecar.py --parts 2      # -> the zips + manifest entries
+gh release create v0.1.0 sidecar-dist/phosphor-sidecar-*of2.zip --title "..." --notes "..."
 ```
 
-Hugging Face rather than GitHub Releases, deliberately: at 2.06 GB the archive is only just
-under GitHub's 2 GiB per-asset cap, and one torch update would push it over. HF has no
-practical limit, and the downloader already fetches everything else from there.
+Until they are uploaded, first run fetches the models fine and then fails on the sidecar
+with a legible 404.
 
-**Re-run `package_sidecar.py` and update the sha256 in `models.json` after any sidecar
-rebuild.** The freeze is not bit-reproducible, so the hash changes even when the code does
-not.
+**Re-run `package_sidecar.py` and paste the new entries into `models.json` after any sidecar
+rebuild.** The freeze is not bit-reproducible, so the hashes change even when the code does
+not. `package_sidecar.py` writes them to `sidecar-dist/manifest-entries.json`, warns if a
+part crosses 2 GiB, and deletes stale archives so an old one cannot be uploaded by mistake.
 
