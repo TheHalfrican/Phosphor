@@ -800,8 +800,8 @@ with PIL reporting every frame duration as 0.
 
 ### Open bugs — found installing 0.2.0, 2026-08-21
 
-Three things seen in the installed app, none of them blocking export. **Bug 1 is fixed**
-(2026-08-21); 2 and 3 are open.
+Three things seen in the installed app, none of them blocking export. As of 2026-08-21
+**bug 1 is fixed** and **bug 2 turned out not to be a defect**; only 3 is still open.
 
 **1. A 2:3 cover is squashed horizontally in the mask editor. FIXED 2026-08-21.**
 
@@ -846,13 +846,39 @@ controls below always leave the stage short enough that the width never clamps, 
 `object-fit: cover` would crop rather than distort. Left alone deliberately; if it ever
 surfaces, apply the same `min()` treatment.
 
-**2. The icon does not show on a Start Menu pin.** Taskbar and the exe are correct now, so
-this is a third icon path, distinct from the two already fixed (window icon via
-`entries()[0]`, and exe resource). Start pins take their icon from the shortcut's
-`IconResource`, and Windows caches Start tiles aggressively and separately from the taskbar.
-Worth checking, in order: what the NSIS/MSI shortcut actually points at, whether it names an
-icon explicitly, and whether it survives clearing the Start tile cache. The `Square*Logo.png`
-assets are MSIX/Store tiles and are almost certainly *not* what a classic Start pin reads.
+**2. The icon does not show on a Start Menu pin. NOT A DEFECT, closed 2026-08-21.**
+
+It shows. Investigated on the installed app and the pin renders the icon correctly, from the
+right entry. The original write-up guessed a stale Start tile cache and that is what it was:
+a reboot between the sighting and the investigation cleared it. **No code change.**
+
+What was checked, so nobody re-chases it:
+
+| | |
+|---|---|
+| NSIS shortcut (per-user) | `IconLocation` is `,0`, so it inherits the exe's own icon resource |
+| MSI shortcut (per-machine) | points at `C:\WINDOWS\Installer\{GUID}\ProductIcon` |
+| That ProductIcon | **byte-identical** to `src-tauri/icons/icon.ico`: 43,429 B, the same 10 entries, largest first |
+| What the pin actually drew | pixel-compared against the 128px entry: a match |
+
+So all three icon paths are now correct: window icon (`entries()[0]`), exe resource, and
+shortcut. The `Square*Logo.png` assets remain MSIX/Store tiles and are not read by a classic
+Start pin.
+
+Two things found in passing that are worth knowing:
+
+- **The pin sits at the very end of a ~40 item pinned grid, below the fold.** It is easy to
+  conclude the icon is missing when the tile is simply off-screen. Check with Start search
+  first, which renders the same icon and needs no scrolling.
+- **Both installers were installed at once**, and they share a single target:
+  `%LOCALAPPDATA%\Phosphor\phosphor.exe`. That leaves two Start entries for one app, and
+  uninstalling either one will leave the other's shortcut dangling. Worth deciding which
+  installer is the supported one before pointing anyone at the release.
+
+Minor, and a design question rather than a bug: the icon is darker than a typical pin.
+Measured on the pinned grid, mean luminance **44 against a neighbour average of 70**, with
+4% of its pixels above mid-grey against 18%. It is not an outlier (Cheat Engine and LocalSend
+are dimmer) but a dark card with thin light bars does recede on Windows' dark acrylic.
 
 **3. First-run setup errored on Download, then worked after a restart.** Error text was not
 captured, so this needs reproducing before it can be diagnosed. The installed app writes no
