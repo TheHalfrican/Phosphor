@@ -643,7 +643,11 @@ assumptions are the only real risk in this project.
 
 ## 11. Backlog (do not build in v1)
 
-- `Wan2.2-Fun-5B-InP` optional model for directional/causal motion presets
+- `Wan2.2-Fun-5B-InP` optional model for directional/causal motion presets. **Now has
+  evidence behind it beyond directional motion:** `docs/animation-timing.md` measured
+  SteamGridDB's animated covers as one-way loops of 6.6 s and 13.6 s, against our 2.67 s
+  ping-pong that reverses every 1.33 s. The reversal rate, not the speed, is what reads
+  as restless. InP removes it.
 - Custom Prompt Pack (optional UMT5 download)
 - Batch processing across a library folder
 - Direct export into launcher metadata formats (Playnite, ES-DE)
@@ -682,6 +686,7 @@ tools/build_loop.py            ping-pong + upscale + encode, asserts seam qualit
 tools/text_mask.py             CRAFT detect + composite
 tools/sweep.py                 cover x preset sweep
 tools/analyze_run.py           metrics — READ ITS HEADER, it is broken cross-cover
+tools/webp_timing.py           frame delays / fps / duration from the WebP container
 ```
 
 ### Sidecar freeze — done 2026-08-20
@@ -752,6 +757,18 @@ Full or Half, chosen in the export dialog and reflected on the main screen and s
 **Half is the default.** See §7 for the sizes, the measurements and the reasoning. Verified
 in the app on one Halo generation with only the toggle flipped: 1200×1800 / 3.49 MB and
 600×900 / 1.24 MB, both 64 frames.
+
+### Animation timing, measured and shelved 2026-08-21
+
+`docs/animation-timing.md`. Phosphor's covers read as faster than SteamGridDB's; the cause
+is **not** frame rate. Theirs run at 30 fps against our 24, and by motion per second ours is
+already a third as busy. What reads as restless is the ping-pong reversing every 1.33 s
+where theirs are one-way loops of 6.6 s and 13.6 s.
+
+Shelved without code changes: the RetroVoid hitch that prompted it is a decode-cost problem
+that the half-size export addresses. The doc carries the reference measurements, the fps and
+frame-count options with their costs, and three traps in analysing animated WebP, starting
+with PIL reporting every frame duration as 0.
 
 ### Built but not finished
 
