@@ -683,32 +683,27 @@ would have made `model_status` fail in a packaged build.
 - `tools/analyze_run.py`'s `stability` metric **does not generalise across covers** — it
   scored two visibly destroyed covers as "OK". Use it only for A/B within one cover.
 
-### The Claude Design source
+### The UI source
 
-The UI comes from a Claude Design project. To reopen it:
+The interface was designed on a Claude Design canvas and ported here rather than authored ad
+hoc: eight screens (1a main, 1b alt main, 1c empty, 1d mask editor, 1e generating, 1f export,
+1g first-run download, 1h settings). **Nocturne** is the design system, ported to
+`src/nocturne.css`; §7a has its rules, and they are not decoration.
 
-```
-(private design project link removed)
-```
+The canvas is a private project, so its link is kept outside this repo. If you have access:
+`support.js` and `_ds_bundle.js` in it are the canvas editor's own runtime (`dc-runtime`,
+which renders `<x-dc>` documents), not application code. Do not port them.
 
-Readable through the `DesignSync` MCP (`list_files` / `get_file` with
-`projectId: (removed)`). `support.js` and `_ds_bundle.js` in that
-project are the canvas editor's own runtime — not app code, do not port them.
+### Before this is ready to share
 
-### Launch plan
+Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. Two things are still
+missing before it is worth pointing anyone at:
 
-Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0, but **not announced
-yet, deliberately**. Until the sidecar is frozen there is no installer, so the "free tool"
-still requires Rust, Python and a ~19 GB dev setup — a developer artifact rather than
-something to hand a RetroVoid user. The funnel only switches on with a downloadable
-installer, which is the next task and expected shortly.
-
-Still to land before announcing:
-
-- the PyInstaller freeze and an installer (below)
-- **screenshots in the README** — Noah is adding these; they belong near the top, under the
-  opening paragraphs and above "What it does". A tool whose entire value is visual currently
-  shows nothing.
+- **An installer.** Until the sidecar is frozen, running Phosphor needs Rust, Python and a
+  ~19 GB dev setup, which makes it a developer artifact rather than something a person can
+  simply use. This is the next task.
+- **Screenshots in the README.** They belong near the top, under the opening paragraphs and
+  above "What it does". A tool whose whole value is visual currently shows none of it.
 
 ### Next step
 
