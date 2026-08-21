@@ -227,7 +227,15 @@ body { overflow: hidden; user-select: none; }
   border-radius: var(--radius-md); overflow: hidden; position: relative;
   box-shadow: var(--shadow-md); background: var(--color-surface); touch-action: none;
 }
-.ph-maskcanvas img { width: 100%; display: block; }
+/* Fill the box on both axes. The container is sized `height: 100%` with `width: auto`
+   from its aspect-ratio, but when the stage is narrow `max-width: 100%` clamps the width
+   while the definite height stays put, so the box ends up taller than its own ratio. The
+   image was width-driven with `height: auto`, so it came up short and the container's
+   surface colour showed through as a grey band beneath the cover.
+   `fill` also keeps the image and the mask canvas exactly co-registered: the canvas is
+   inset:0 over the same box, so both stretch identically and the mask never slides
+   relative to the artwork under it. */
+.ph-maskcanvas img { width: 100%; height: 100%; object-fit: fill; display: block; }
 .ph-maskcanvas canvas {
   position: absolute; inset: 0; width: 100%; height: 100%;
   /* Normal blend, not screen. The canvas now holds the accent colour with mask strength

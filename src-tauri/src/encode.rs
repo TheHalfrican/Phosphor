@@ -90,15 +90,11 @@ async fn run(ffmpeg: &Path, args: &[String]) -> Result<(), EncodeError> {
 ///
 /// `quality` 75 is the default and sits at the knee of the size/quality curve: q95 costs
 /// 2.9x the size for 4.6 dB. It does not need to be a user-facing slider.
-pub async fn webp(
-    ffmpeg: &Path,
-    pattern: &Path,
-    out: &Path,
-    aspect: Aspect,
-    quality: u8,
-) -> Result<PathBuf, EncodeError> {
+/// Split out so the argument list can be asserted in a test. The `-f webp` in here is
+/// load-bearing and easy to delete as redundant; see the note below.
+fn webp_args(pattern: &Path, out: &Path, aspect: Aspect, quality: u8) -> Vec<String> {
     let (ow, oh) = aspect.out_size();
-    let args: Vec<String> = vec![
+    vec![
         "-y".into(), "-hide_banner".into(), "-loglevel".into(), "error".into(),
         "-framerate".into(), FPS.to_string(),
         "-i".into(), pattern.to_string_lossy().into(),
@@ -108,9 +104,23 @@ pub async fn webp(
         "-q:v".into(), quality.to_string(),
         "-loop".into(), "0".into(),
         "-preset".into(), "picture".into(),
+        // Force the muxer instead of letting ffmpeg infer it from the output extension.
+        // The Steam export writes these exact bytes to a file named `.png`, and without
+        // this ffmpeg would see that name, select the image2 muxer, and emit a numbered
+        // PNG sequence rather than one animated WebP.
+        "-f".into(), "webp".into(),
         out.to_string_lossy().into(),
-    ];
-    run(ffmpeg, &args).await?;
+    ]
+}
+
+pub async fn webp(
+    ffmpeg: &Path,
+    pattern: &Path,
+    out: &Path,
+    aspect: Aspect,
+    quality: u8,
+) -> Result<PathBuf, EncodeError> {
+    run(ffmpeg, &webp_args(pattern, out, aspect, quality)).await?;
     Ok(out.to_path_buf())
 }
 
@@ -172,6 +182,22 @@ mod tests {
             assert_eq!(w % 32, 0, "gen width {w} not divisible by 32");
             assert_eq!(h % 32, 0, "gen height {h} not divisible by 32");
         }
+    }
+
+    /// The Steam export is the same bytes under a `.png` name, which only works because
+    /// the muxer is stated explicitly. Drop `-f webp` and ffmpeg infers image2 from the
+    /// extension and writes a PNG sequence, so this pins it.
+    #[test]
+    fn webp_forces_its_muxer_so_a_png_name_cannot_change_it() {
+        let args = webp_args(
+            Path::new("frames_%04d.png"),
+            Path::new("cover_animated.png"),
+            Aspect::ThreeFour,
+            75,
+        );
+        let i = args.iter().position(|a| a == "-f").expect("-f must be present");
+        assert_eq!(args[i + 1], "webp");
+        assert!(args.iter().any(|a| a == "libwebp_anim"));
     }
 
     #[test]

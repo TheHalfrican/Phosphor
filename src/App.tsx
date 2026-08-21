@@ -20,6 +20,11 @@ import "./App.css";
    ═══════════════════════════════════════════════════════════════════════════ */
 
 type Preset = { id: string; name: string; blurb: string; prompt: string };
+type Format = "webp" | "steam" | "gif";
+/* The file extension each format writes. "steam" is the whole trick: WebP bytes, .png
+   name. Keep this the single source of truth so the save dialog, the filter and the
+   button label cannot drift apart. */
+const EXT: Record<Format, string> = { webp: "webp", steam: "png", gif: "gif" };
 type Screen = "setup" | "empty" | "main" | "generating" | "mask" | "settings";
 type Strength = "gentle" | "standard" | "bold";
 
@@ -94,7 +99,10 @@ export default function App() {
   const [redetecting, setRedetecting] = useState(false);
 
   const [showExport, setShowExport] = useState(false);
-  const [format, setFormat] = useState<"webp" | "gif">("webp");
+  /* "steam" is animated WebP written to a .png filename. Steam accepts custom grid art
+     by extension, but its UI is Chromium, which picks a decoder from the header bytes and
+     ignores the name, so the file passes the check and still animates. */
+  const [format, setFormat] = useState<Format>("webp");
   const [exporting, setExporting] = useState(false);
   const [autoProtect, setAutoProtect] = useState(true);
 
@@ -266,9 +274,10 @@ export default function App() {
   async function runExport() {
     if (!gen) return;
     const base = cover.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ?? "cover";
+    const ext = EXT[format];
     const dest = await save({
-      defaultPath: `${base}_animated.${format}`,
-      filters: [{ name: format.toUpperCase(), extensions: [format] }],
+      defaultPath: `${base}_animated.${ext}`,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     });
     if (!dest) return;
 
@@ -280,6 +289,7 @@ export default function App() {
         source: cover,
         mask: maskData || null,
         outPath: dest,
+        // "steam" takes the WebP path; only the filename differs.
         gif: format === "gif",
       });
       setShowExport(false);
@@ -742,8 +752,8 @@ function DropZone({ onPick, onFile }: { onPick: () => void; onFile: (p: string) 
 }
 
 function ExportDialog(props: {
-  name: string; outSize: string; format: "webp" | "gif";
-  setFormat: (f: "webp" | "gif") => void; exporting: boolean;
+  name: string; outSize: string; format: Format;
+  setFormat: (f: Format) => void; exporting: boolean;
   onCancel: () => void; onExport: () => void;
 }) {
   const { name, outSize, format, setFormat, exporting, onCancel, onExport } = props;
@@ -759,7 +769,7 @@ function ExportDialog(props: {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button className="ph-fmt" aria-pressed={format === "webp"} onClick={() => setFormat("webp")}>
-            <span className="mark">◉</span>
+            <span className="mark">{format === "webp" ? "◉" : "○"}</span>
             <span className="col">
               <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span className="name">Animated WebP</span>
@@ -770,8 +780,23 @@ function ExportDialog(props: {
             </span>
           </button>
 
+          <button className="ph-fmt" aria-pressed={format === "steam"} onClick={() => setFormat("steam")}>
+            <span className="mark">{format === "steam" ? "◉" : "○"}</span>
+            <span className="col">
+              <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span className="name">Steam (.png)</span>
+                <span className="tag" style={{ fontSize: 9 }}>for Steam</span>
+              </span>
+              <span className="desc">
+                The same WebP, named .png. Steam checks the extension; its Chromium UI reads
+                the header and animates it anyway.
+              </span>
+              <span className="size">≈ 6 MB · identical to WebP</span>
+            </span>
+          </button>
+
           <button className="ph-fmt" aria-pressed={format === "gif"} onClick={() => setFormat("gif")}>
-            <span className="mark">○</span>
+            <span className="mark">{format === "gif" ? "◉" : "○"}</span>
             <span className="col">
               <span className="name">GIF</span>
               <span className="desc">For launchers that can't play WebP. 256 colors — gradients will band.</span>
@@ -785,7 +810,7 @@ function ExportDialog(props: {
             Cancel
           </button>
           <button className="btn btn-primary" style={{ fontSize: 12.5 }} onClick={onExport} disabled={exporting}>
-            {exporting ? "Exporting…" : `Export ${format.toUpperCase()}`}
+            {exporting ? "Exporting…" : `Export ${EXT[format].toUpperCase()}`}
           </button>
         </div>
       </div>
