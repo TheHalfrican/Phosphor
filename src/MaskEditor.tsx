@@ -262,7 +262,13 @@ export function MaskEditor({
       <div className="ph-body">
         <div className="ph-mask">
           <div className="ph-maskstage">
-            <div className="ph-maskcanvas" style={{ aspectRatio: `${width} / ${height}` }}>
+            {/* `--ar` rather than `aspectRatio`: App.css needs the ratio as a bare
+                number so it can divide by it, to fit the box against both of the
+                stage's axes at once. It sets `aspect-ratio: var(--ar)` from this. */}
+            <div
+              className="ph-maskcanvas"
+              style={{ "--ar": width / height } as React.CSSProperties}
+            >
               <img src={coverUrl} alt="" draggable={false} />
               <canvas
                 ref={canvasRef}

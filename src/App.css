@@ -215,26 +215,46 @@ body { overflow: hidden; user-select: none; }
 /* ── mask editor (1d) ──────────────────────────────────────────────────────── */
 .ph-mask {
   display: grid; grid-template-columns: minmax(0, 1fr) 148px; gap: 14px;
+  /* One explicit row, so the stage's height is definite rather than content-derived.
+     That is what lets the stage below be a size container. */
+  grid-template-rows: minmax(0, 1fr);
   padding: 16px 16px 14px;
   flex: 1; min-height: 0;
   width: 100%; max-width: 900px; margin-inline: auto;
 }
-.ph-maskstage { display: grid; place-items: center; min-height: 0; min-width: 0; }
+/* A size container, so the cover box can be sized against BOTH of the stage's axes.
+   Percentages cannot cross axes; cqw/cqh can, and that is the whole fix below. */
+.ph-maskstage {
+  display: grid; place-items: center; min-height: 0; min-width: 0;
+  container-type: size;
+}
 .ph-maskcanvas {
-  /* Same height-driven sizing as .ph-cover. This is the screen where scale matters most:
-     the mask is edited by hand, and a 252px preview made that needlessly fiddly. */
-  height: 100%; width: auto; max-height: 100%; max-width: 100%;
+  /* Contain-fit against both axes at once. `--ar` is the generation ratio (width/height),
+     set inline by MaskEditor.
+
+     The previous version was height-driven: `height: 100%; width: auto` with the ratio
+     deriving the width, then `max-width: 100%` as a backstop. That backstop is what broke
+     2:3 covers: clamping the width does NOT shrink the definite height, so the box came
+     out taller than its own ratio and `object-fit: fill` stretched the artwork into it.
+     A 2:3 box is narrower for a given height, so it clamped sooner and distorted more.
+     Measured at 804x1804, where 2:3 wanted 804x1206: a 33% horizontal squash.
+
+     min() picks whichever axis runs out first, so the box is always exactly on ratio and
+     the clamp never fires. This is also the screen where scale matters most: the mask is
+     edited by hand, and a 252px preview made that needlessly fiddly. */
+  aspect-ratio: var(--ar);
+  height: min(100cqh, 100cqw / var(--ar));
+  width: auto;
   border-radius: var(--radius-md); overflow: hidden; position: relative;
   box-shadow: var(--shadow-md); background: var(--color-surface); touch-action: none;
 }
-/* Fill the box on both axes. The container is sized `height: 100%` with `width: auto`
-   from its aspect-ratio, but when the stage is narrow `max-width: 100%` clamps the width
-   while the definite height stays put, so the box ends up taller than its own ratio. The
-   image was width-driven with `height: auto`, so it came up short and the container's
-   surface colour showed through as a grey band beneath the cover.
-   `fill` also keeps the image and the mask canvas exactly co-registered: the canvas is
-   inset:0 over the same box, so both stretch identically and the mask never slides
-   relative to the artwork under it. */
+/* `fill`, and deliberately so. This is not papering over a fit problem: the sidecar
+   does a plain `resize((width, height))` (sidecar/pipeline.py), a non-uniform stretch to
+   the generation size, so filling the box shows exactly what the model is handed. It also
+   keeps the image and the mask canvas co-registered: the canvas is inset:0 over the same
+   box, so both stretch identically and the mask never slides relative to the artwork.
+   With the box now always on ratio, `fill` and `contain` agree anyway for the 3:4 and 2:3
+   covers the app accepts. */
 .ph-maskcanvas img { width: 100%; height: 100%; object-fit: fill; display: block; }
 .ph-maskcanvas canvas {
   position: absolute; inset: 0; width: 100%; height: 100%;

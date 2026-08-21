@@ -587,6 +587,7 @@ assumptions are the only real risk in this project.
 | No LoRA-on-GGUF | Q6_K stores a 3072-wide row as 2520 packed bytes; fusing a logical-shaped delta fails. Ship a pre-distilled GGUF instead if the distill is ever wanted. |
 | Download to `.part`, rename only after the hash passes | The final path then only ever exists with verified contents, which is what lets startup stay a cheap size check rather than rehashing 7 GB every launch. |
 | Phosphor is free and Apache-2.0; RetroVoid is paid | Free, self-contained tools are the draw into The Halfrican Software's ecosystem, and Phosphor suits that unusually well because its output is *displayed* — every cover made keeps advertising. Apache rather than MIT for its §6: it grants the code and explicitly withholds the trademarks, so a fork cannot present itself as Phosphor. Weights are never redistributed (§3), so repo licensing stays independent of the models'. |
+| Aspect-ratio boxes fit against both axes, via `cqw`/`cqh` | Pinning one axis and clamping the other with `max-*` silently puts the box off-ratio: the clamp does not shrink the definite dimension. It squashed 2:3 covers 33% in the mask editor. Percentages cannot cross axes, so `min(100cqh, 100cqw / var(--ar))` on a size container is the actual fix. |
 | `native-tls` for the downloader, not rustls | **reqwest 0.13 renamed its TLS features** — `rustls-tls` no longer exists and `default-tls` now *means* rustls, whose provider is aws-lc-rs (wants cmake + nasm on windows-msvc). `native-tls` is schannel: no crypto toolchain, no vendored roots, and it trusts what Windows already trusts. Do not "fix" this back to the 0.11/0.12 spelling. |
 
 ---
@@ -703,23 +704,51 @@ would have made `model_status` fail in a packaged build.
 
 ### Open bugs — found installing 0.2.0, 2026-08-21
 
-Three things seen in the installed app, none of them blocking export.
+Three things seen in the installed app, none of them blocking export. **Bug 1 is fixed**
+(2026-08-21); 2 and 3 are open.
 
-**1. A 2:3 cover is squashed horizontally in the mask editor.** Halo only; 3:4 covers are
-fine, and the export itself is correct, so this is preview-only.
+**1. A 2:3 cover is squashed horizontally in the mask editor. FIXED 2026-08-21.**
 
-Almost certainly the fix for the grey band, seen from the other side.
-`.ph-maskcanvas img` is `object-fit: fill`, which was chosen so the image always covers the
-box and stays co-registered with the mask canvas overlaid on the same rect. But the box
-itself can go off-aspect: it takes `height: 100%` from the stage and derives width from
-`aspect-ratio`, and when `max-width: 100%` clamps that width the definite height does not
-shrink to match. Previously that surfaced as a grey band; now `fill` stretches the artwork
-into it instead. A 2:3 box is taller and narrower, so it clamps sooner and distorts more.
+The diagnosis in the original write-up was right. `.ph-maskcanvas` took `height: 100%` from
+the stage and derived its width from `aspect-ratio`, with `max-width: 100%` as a backstop.
+Clamping the width does not shrink the definite height, so the box went off-ratio and
+`object-fit: fill` stretched the artwork into it. A 2:3 box is narrower for a given height,
+so it clamped sooner and distorted more.
 
-The real fix is to stop the box going off-aspect rather than to paper over it: size it so it
-fits *both* axes, rather than pinning one and clamping the other. Do not simply revert to
-`object-fit: contain`, which brings the grey band back, or `cover`, which would crop the
-mask out of alignment with the artwork.
+Measured on Halo in the mask editor at the shipped 460x720 window: **804x1804, ratio 0.446**,
+where 2:3 wants 0.667. A **33% horizontal squash**.
+
+The fix sizes the box against *both* of the stage's axes at once. Percentages cannot cross
+axes, so this needs container query units: `.ph-maskstage` becomes `container-type: size`
+and the box takes `height: min(100cqh, 100cqw / var(--ar))`, with `--ar` set inline by
+`MaskEditor` as a bare number so CSS can divide by it. `.ph-mask` gained an explicit
+`grid-template-rows: minmax(0, 1fr)` so the stage's height is definite rather than
+content-derived, which is what a size container requires.
+
+Verified in the running app, not only by reasoning:
+
+| | box | ratio | vs target |
+|---|---|---|---|
+| Halo 2:3, before | 804x1804 | 0.4457 | -33.1% |
+| Halo 2:3, after | 804x1203 | 0.6683 | +0.2% |
+| Halo 2:3, after, maximized 3876x2196 | 1204x1804 | 0.6674 | +0.1% |
+| BO3 3:4, after | 804x1070 | 0.7514 | +0.2% |
+
+The two Halo "after" rows matter more than the numbers suggest: the first is **width**
+limited and the second **height** limited, so `min()` is demonstrably picking the correct
+axis in both regimes rather than happening to agree in one.
+
+**`object-fit: fill` stays, and is not a workaround.** `pipeline.py` feeds the model a plain
+`resize((width, height))`, a non-uniform stretch to the generation size, so filling the box
+shows exactly what the model is handed. It also guarantees the image and the mask canvas stay
+co-registered. Do not "fix" it to `contain` (brings back the grey band) or `cover` (crops the
+mask out of alignment).
+
+**The same latent bug exists on `.ph-cover`** (main and generating screens), which uses the
+same height-driven pattern. It is not reachable at any window shape tested, because the
+controls below always leave the stage short enough that the width never clamps, and its
+`object-fit: cover` would crop rather than distort. Left alone deliberately; if it ever
+surfaces, apply the same `min()` treatment.
 
 **2. The icon does not show on a Start Menu pin.** Taskbar and the exe are correct now, so
 this is a third icon path, distinct from the two already fixed (window icon via
@@ -822,8 +851,10 @@ Still missing before it is worth pointing anyone at:
   fullscreen window is still a centred column. Making it landscape needs a wrapper element
   around the non-artwork controls, so it is a composition change rather than CSS and belongs
   on the design canvas.
-- **A 2:3 cover generated end to end.** Both ratios are wired and unit-tested, but every
-  real generation so far has been 3:4. Halo is the test case.
+- ~~**A 2:3 cover generated end to end.**~~ **Done 2026-08-21.** Halo ran the whole path in
+  the app: 768x1152 generation, **113.4 s** on a debug build including model load, CRAFT
+  found the title at 7.7% of frame, and the export offered 1200x1800. BO3 3:4 in the same
+  session took 69.3 s warm. Nothing in the 2:3 path needed changing.
 
 **The sidecar release tag is independent of the app version.** `assets/models.json` points
 at the `v0.1.0` release because that is where the archives live and the frozen sidecar has
