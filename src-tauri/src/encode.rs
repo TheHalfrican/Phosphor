@@ -28,12 +28,15 @@ use tokio::process::Command;
 /// halving each axis quarters the pixel count, which is where the cost actually is. It is
 /// also *closer to native* than `Full` is. Generation is 768x1024 / 768x1152, so `Full`
 /// upscales 1.76x / 1.56x while `Half` downscales to 0.88x / 0.78x. `Half` is discarding
-/// resolution the model never produced, rather than detail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// resolution the model never produced, rather than detail. That is why it can be the
+/// default without costing visible quality.
+///
+/// **No `Default` impl on purpose.** The default is a UI preference and lives in exactly
+/// one place, `App.tsx`'s `half` state, currently `Half`. A derived default here would be
+/// a second answer to the same question that nothing reads, and would silently go stale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutScale {
-    /// SteamGridDB grid size. The default, because the target display is a large-format TV
-    /// where covers are viewed near full size (CLAUDE.md §5).
-    #[default]
+    /// SteamGridDB grid size. 1350x1800 and 1200x1800.
     Full,
     /// Half of each axis. 675x900 and 600x900.
     Half,

@@ -105,11 +105,16 @@ export default function App() {
   const [format, setFormat] = useState<Format>("webp");
   const [exporting, setExporting] = useState(false);
   const [autoProtect, setAutoProtect] = useState(true);
-  /* Half-size export. Added because a launcher scrolling a grid of full-size animated
-     covers decodes 2.43 Mpx per frame, and halving each axis quarters that. Full stays the
-     default: the target display is a large-format TV where covers are viewed near full
-     size (CLAUDE.md §5). */
-  const [half, setHalf] = useState(false);
+  /* Half-size export, and the default. A launcher scrolling a grid of full-size animated
+     covers decodes 2.43 Mpx per frame and hitches; halving each axis quarters that.
+
+     Defaulting to Half is not the compromise it looks like. Generation is 768x1024 /
+     768x1152, so Half *downscales* to 0.88x while Full *upscales* 1.76x: Half is dropping
+     resolution the model never produced, and at equal display size the two are
+     indistinguishable (CLAUDE.md §7). The 85" TV argument in §5 is about the *generation*
+     size, which has not changed. Full is one click away for a cover that gets displayed
+     large. */
+  const [half, setHalf] = useState(true);
 
   const startedAt = useRef(0);
 

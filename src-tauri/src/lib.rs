@@ -423,7 +423,9 @@ async fn export(
     let (w, h) = image_size(&frames[0])?;
     let aspect = Aspect::classify(w, h);
     // Half exists for launcher grid scrolling: a quarter of the pixels to decode per frame.
-    // Absent means Full, so an older caller keeps the previous behaviour.
+    // The UI always sends this explicitly and defaults it to Half; the fallback here is
+    // deliberately Full, so a caller that omits the field gets more pixels than it asked
+    // for rather than fewer. Failing toward the larger export is the recoverable direction.
     let scale = if half.unwrap_or(false) { OutScale::Half } else { OutScale::Full };
 
     let staging = std::env::temp_dir().join(format!("phosphor_pp_{}", uuid::Uuid::new_v4()));

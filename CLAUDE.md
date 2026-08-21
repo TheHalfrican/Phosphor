@@ -429,9 +429,17 @@ order of magnitude.
 
 GIF halves harder: 40.36 → 11.18 MB on BO3 (28%), 34.24 → 8.52 MB on Halo (25%).
 
-**Full stays the default.** The target display is a large-format TV where covers are viewed
-near full size (§5), so Half is a deliberate trade for grid smoothness, not a better
-default. If a launcher only ever shows these in a grid, that reasoning would flip.
+**Half is the default** (set 2026-08-21). An earlier revision of this section defaulted to
+Full and argued the §5 large-format-TV point against it. That was a misread: §5 is about the
+*generation* size, which has not changed. What Half drops is upscale, not detail, and at
+equal display size the two are indistinguishable. Covers are seen in a grid far more often
+than they are seen large, so the common case should be the smooth one. Full is one click
+away.
+
+The default lives in **exactly one place**, `App.tsx`'s `half` state. `OutScale` has no
+`Default` impl on purpose, so there is no second answer to go stale. The Rust command's
+`half.unwrap_or(false)` is a *fallback* rather than a default: a caller that omits the field
+gets Full, because failing toward the larger export is the recoverable direction.
 
 ### Animated WebP (primary)
 
@@ -628,7 +636,7 @@ assumptions are the only real risk in this project.
 | Download to `.part`, rename only after the hash passes | The final path then only ever exists with verified contents, which is what lets startup stay a cheap size check rather than rehashing 7 GB every launch. |
 | Phosphor is free and Apache-2.0; RetroVoid is paid | Free, self-contained tools are the draw into The Halfrican Software's ecosystem, and Phosphor suits that unusually well because its output is *displayed* — every cover made keeps advertising. Apache rather than MIT for its §6: it grants the code and explicitly withholds the trademarks, so a fork cannot present itself as Phosphor. Weights are never redistributed (§3), so repo licensing stays independent of the models'. |
 | Aspect-ratio boxes fit against both axes, via `cqw`/`cqh` | Pinning one axis and clamping the other with `max-*` silently puts the box off-ratio: the clamp does not shrink the definite dimension. It squashed 2:3 covers 33% in the mask editor. Percentages cannot cross axes, so `min(100cqh, 100cqw / var(--ar))` on a size container is the actual fix. |
-| Export offers Full and Half, ratio still automatic | A launcher grid hitches on full-size animated covers, and decode cost is per-pixel: half each axis is a quarter of the pixels. Half is also *closer to native* than Full, which upscales 1.76x from the generation size. Exposing four raw sizes instead of a scale would let a 3:4 size be picked for a 2:3 cover. |
+| Export offers Full and Half, **Half by default**, ratio still automatic | A launcher grid hitches on full-size animated covers, and decode cost is per-pixel: half each axis is a quarter of the pixels. Half is also *closer to native* than Full, which upscales 1.76x from the generation size, so the default costs no visible quality at grid size. Exposing four raw sizes instead of a scale would let a 3:4 size be picked for a 2:3 cover. |
 | `native-tls` for the downloader, not rustls | **reqwest 0.13 renamed its TLS features** — `rustls-tls` no longer exists and `default-tls` now *means* rustls, whose provider is aws-lc-rs (wants cmake + nasm on windows-msvc). `native-tls` is schannel: no crypto toolchain, no vendored roots, and it trusts what Windows already trusts. Do not "fix" this back to the 0.11/0.12 spelling. |
 
 ---
@@ -741,9 +749,9 @@ would have made `model_status` fail in a packaged build.
 ### Export scale, added 2026-08-21
 
 Full or Half, chosen in the export dialog and reflected on the main screen and status bar.
-See §7 for the sizes, the measurements and why Full stays the default. Verified in the app
-on one Halo generation with only the toggle flipped: 1200×1800 / 3.49 MB and 600×900 /
-1.24 MB, both 64 frames.
+**Half is the default.** See §7 for the sizes, the measurements and the reasoning. Verified
+in the app on one Halo generation with only the toggle flipped: 1200×1800 / 3.49 MB and
+600×900 / 1.24 MB, both 64 frames.
 
 ### Built but not finished
 
