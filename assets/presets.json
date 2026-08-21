@@ -1,0 +1,54 @@
+{
+  "_comment": "v1 presets. ALL must be non-causal (ping-pong safe) per CLAUDE.md §6. Every prompt explicitly pins subjects still — the failure mode that makes this category look cheap is a face melting. Adding or editing a preset requires re-running tools/bake_embeddings.py and shipping a new assets/embeddings.safetensors.",
+  "negative_prompt_source": "Wan-Video/Wan2.2 -> wan/configs/shared_config.py -> wan_shared_cfg.sample_neg_prompt (pulled verbatim at bake time, never transcribed)",
+  "presets": [
+    {
+      "id": "slow_drift",
+      "name": "Slow Drift",
+      "blurb": "Gentle parallax push on the background",
+      "prompt": "Subtle parallax drift in the background layer, with an almost imperceptible slow camera push. Foreground subjects remain completely still and stable. Gentle, slow, cinematic, minimal motion."
+    },
+    {
+      "id": "neon_flicker",
+      "name": "Neon Flicker",
+      "blurb": "Pulsing sign / emissive glow",
+      "prompt": "Neon signs and emissive lights pulse and flicker gently, glow intensity breathing softly up and down. Everything else in the frame remains perfectly still. Subtle light variation only, no camera movement."
+    },
+    {
+      "id": "water_ripple",
+      "name": "Water Ripple",
+      "blurb": "Reflective surface disturbance",
+      "prompt": "A reflective water surface ripples gently, with soft undulating reflections shifting across it. Everything above the waterline remains completely static. Slow, subtle surface disturbance."
+    },
+    {
+      "id": "fog_roll",
+      "name": "Fog Roll",
+      "blurb": "Low ambient mist swirl",
+      "prompt": "Low ambient mist drifts and curls slowly across the scene, soft volumetric haze swirling in place. Subjects remain still and stable. Slow atmospheric movement, no camera movement."
+    },
+    {
+      "id": "ember_glow",
+      "name": "Ember Glow",
+      "blurb": "Warm light breathing",
+      "prompt": "Warm firelight breathes softly, its intensity rising and falling. Embers shimmer gently in place. Subjects remain completely still and stable. Gentle light pulsing, no camera movement."
+    },
+    {
+      "id": "cloth_sway",
+      "name": "Cloth Sway",
+      "blurb": "Cape / flag / hair micro-motion",
+      "prompt": "Fabric, cape, flag and hair sway gently as if in a soft breeze, slow micro-motion at the edges only. Faces and bodies remain still and stable. Subtle cloth movement only."
+    },
+    {
+      "id": "starfield_shimmer",
+      "name": "Starfield Shimmer",
+      "blurb": "Subtle twinkle, good for sci-fi covers",
+      "prompt": "Distant stars twinkle and shimmer subtly, faint nebula glow pulsing slowly behind them. Everything else remains perfectly static. Minimal gentle sparkle, no camera movement."
+    },
+    {
+      "id": "rain_sheen",
+      "name": "Rain Sheen",
+      "blurb": "Light glinting on a wet surface (sheen, not falling rain)",
+      "prompt": "Light glints and shifts across a wet reflective surface, specular highlights shimmering softly. No falling rain, no droplets. Subjects remain completely still and stable."
+    }
+  ]
+}

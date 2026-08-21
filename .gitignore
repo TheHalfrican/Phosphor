@@ -1,0 +1,39 @@
+# ── frontend ──────────────────────────────────────────────────────────────────
+node_modules
+dist
+dist-ssr
+*.local
+
+# ── rust ──────────────────────────────────────────────────────────────────────
+src-tauri/target
+src-tauri/gen
+
+# ── bundled binaries ──────────────────────────────────────────────────────────
+# ffmpeg is 111 MB and phosphor-sidecar will be a PyInstaller freeze. Both are
+# reproducible: see src-tauri/binaries/README.md and setup.ps1.
+src-tauri/binaries/*.exe
+bin/
+
+# ── python dev env ────────────────────────────────────────────────────────────
+.venv
+__pycache__/
+*.pyc
+
+# ── downloaded models (~21 GB dev / 7.11 GB runtime) ──────────────────────────
+# Fetched by tools/download_models.py and verified against assets/models.json.
+models/
+
+# ── generated output + logs ───────────────────────────────────────────────────
+out/
+*.log
+
+# ── baked assets ──────────────────────────────────────────────────────────────
+# embeddings.safetensors IS committed: it is 3.57 MB, ships with the app, and is
+# reproducible only on a machine with the 11.4 GB UMT5 encoder. The cached
+# negative prompt is derived and re-fetchable.
+assets/.negative_prompt.txt
+
+# ── editor / os ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea

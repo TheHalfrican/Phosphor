@@ -1,0 +1,58 @@
+{
+  "_comment": "First-run download manifest (CLAUDE.md \u00a73). Weights are NOT shipped in the installer: keeps it small and keeps Apache-2.0 model licensing separate from app distribution. SHA256 computed from verified-working local copies on 2026-08-20.",
+  "total_bytes": 7113617333,
+  "files": [
+    {
+      "key": "transformer",
+      "path": "models/gguf/Wan2.2-TI2V-5B-Q6_K.gguf",
+      "url": "https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF/resolve/main/Wan2.2-TI2V-5B-Q6_K.gguf",
+      "bytes": 4211683680,
+      "sha256": "355f6bee35c4c6cbd0f275112619fe8ac6f7b9b067b885723667b3bde29497c3",
+      "note": "Q6_K quantised TI2V-5B transformer. Q8 buys nothing on 24GB; below Q5 temporal artifacts appear and they move."
+    },
+    {
+      "key": "vae",
+      "path": "models/wan-ti2v-5b-diffusers/vae/diffusion_pytorch_model.safetensors",
+      "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers/resolve/main/vae/diffusion_pytorch_model.safetensors",
+      "bytes": 2818777808,
+      "sha256": "62cd18f19438e35b32ac63020e2852f566e9b02f46b6cdbd87972a356e3c6f4b",
+      "note": "Full-precision VAE. Do NOT quantise - the high-compression decoder does load-bearing reconstruction."
+    },
+    {
+      "key": "vae_config",
+      "path": "models/wan-ti2v-5b-diffusers/vae/config.json",
+      "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers/resolve/main/vae/config.json",
+      "bytes": 1701,
+      "sha256": "d996c340fe9a7df5d7371f76a7d8d6956f6c98256080074d8434fa5eeac11360"
+    },
+    {
+      "key": "scheduler",
+      "path": "models/wan-ti2v-5b-diffusers/scheduler/scheduler_config.json",
+      "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers/resolve/main/scheduler/scheduler_config.json",
+      "bytes": 820,
+      "sha256": "571a3eed68bcd943a61b9fea8efa9e141472216ada59f928c8b5128ce24b32e0"
+    },
+    {
+      "key": "transformer_config",
+      "path": "models/wan-ti2v-5b-diffusers/transformer/config.json",
+      "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers/resolve/main/transformer/config.json",
+      "bytes": 495,
+      "sha256": "dc00d9866e72cf77db6b531aaa33be4dc7148fef9338442bd0ae9181f7075e9b"
+    },
+    {
+      "key": "model_index",
+      "path": "models/wan-ti2v-5b-diffusers/model_index.json",
+      "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers/resolve/main/model_index.json",
+      "bytes": 499,
+      "sha256": "6a72faeb564b0e894aea8fc4ef27241106eb739e8584e869b61589a65473add7"
+    },
+    {
+      "key": "craft",
+      "path": "models/craft/craft_mlt_25k.pth",
+      "url": "https://huggingface.co/Manbehindthemadness/craft_mlt_25k/resolve/main/craft_mlt_25k.pth",
+      "bytes": 83152330,
+      "sha256": "4a5efbfb48b4081100544e75e1e2b57f8de3d84f213004b14b85fd4b3748db17",
+      "note": "CRAFT scene-text detector (MIT). Used for the text-protection mask."
+    }
+  ]
+}

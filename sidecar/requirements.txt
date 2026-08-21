@@ -1,0 +1,32 @@
+# Phosphor sidecar / dev spike deps.
+# torch comes from the CUDA index, not PyPI — see setup.ps1.
+# Verified against RTX 4090 (sm_89), driver 610.88, Python 3.12.
+
+torch==2.13.0
+torchvision
+
+diffusers>=0.36.0
+transformers>=4.57.0
+accelerate>=1.0.0
+safetensors>=0.4.5
+huggingface_hub>=1.28.0   # hf_transfer extra dropped; Xet is the transport now
+
+# GGUF dequant support for WanTransformer3DModel.from_single_file
+gguf>=0.13.0
+
+# required by load_lora_weights() - the Turbo distill LoRA path
+peft>=0.17.0
+
+# UMT5 tokenizer (dev/bake only — not needed at runtime once embeddings are baked)
+sentencepiece
+protobuf
+ftfy
+
+# CRAFT text detection (sidecar/vendor/craft, MIT) needs torchvision for the VGG16-BN
+# backbone. Weights: Manbehindthemadness/craft_mlt_25k (MIT), ~83 MB.
+# NOTE: scipy was installed during an abandoned classical-CV detector attempt and is NOT
+# required — CRAFT replaced it. Do not add it back without a reason.
+
+pillow
+numpy
+tqdm

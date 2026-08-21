@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Phosphor",
+  "version": "0.1.0",
+  "identifier": "software.halfrican.phosphor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Phosphor",
+        "width": 460,
+        "height": 720,
+        "minWidth": 440,
+        "minHeight": 520,
+        "resizable": true,
+        "decorations": false,
+        "transparent": false,
+        "theme": "Dark",
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/**",
+          "$TEMP/**",
+          "$HOME/**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "The Halfrican Software",
+    "copyright": "The Halfrican Software",
+    "category": "Graphics",
+    "shortDescription": "Animated game cover art generator",
+    "longDescription": "Drop in a static game cover, get a seamlessly looping animated cover out. Runs entirely locally on your GPU.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/ffmpeg"
+    ],
+    "resources": {
+      "../assets/presets.json": "assets/presets.json",
+      "../assets/models.json": "assets/models.json",
+      "../assets/embeddings.safetensors": "assets/embeddings.safetensors"
+    }
+  }
+}

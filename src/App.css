@@ -1,0 +1,278 @@
+/* Phosphor application layout.
+   Implements the screens from the Claude Design canvas ("Phosphor UI.dc.html"):
+   1a main, 1c empty, 1d mask editor, 1e generating,
+   1f export, 1g first-run download, 1h settings.
+
+   Everything visual comes from Nocturne tokens (nocturne.css). Nothing here
+   hard-codes a colour the token sheet already carries, per the system's readme —
+   the exceptions are the two status hues (ok green / warn amber) which the design
+   uses literally and the ramps do not provide. */
+
+html, body, #root { height: 100%; }
+body { overflow: hidden; user-select: none; }
+
+.ph-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--color-bg);
+}
+
+/* ── title bar ─────────────────────────────────────────────────────────────── */
+.ph-titlebar {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding-left: 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex: none;
+}
+.ph-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+/* The afterglow dot — the app's one piece of ambient motion. Slow at rest,
+   quickened while generating. CRT phosphor decay is the whole name. */
+.ph-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent);
+  animation: ph-breathe 4s ease-in-out infinite;
+}
+.ph-dot.busy { animation-duration: 1.6s; box-shadow: 0 0 10px var(--color-accent); }
+.ph-dot.idle { animation: none; }
+@keyframes ph-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+
+.ph-winctl { margin-left: auto; display: flex; color: color-mix(in srgb, var(--color-text) 50%, transparent); }
+.ph-winctl button {
+  width: 40px; height: 34px; display: grid; place-items: center;
+  background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 12px;
+}
+.ph-winctl button:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-text); }
+.ph-winctl button.close:hover { background: #b4404a; color: #fff; }
+
+.ph-backbar {
+  display: flex; align-items: center; height: 34px; padding: 0 12px 0 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06); flex: none;
+}
+.ph-backbar button {
+  background: transparent; border: 0; cursor: pointer; padding: 0;
+  font: inherit; font-size: 12px; color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+.ph-backbar button:hover { color: var(--color-text); }
+.ph-backbar .note { margin-left: auto; font-size: 10px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+
+/* ── body + status bar ─────────────────────────────────────────────────────── */
+.ph-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
+
+.ph-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 18px; border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10px; color: color-mix(in srgb, var(--color-text) 40%, transparent);
+  flex: none;
+}
+.ph-status .led { width: 5px; height: 5px; border-radius: 50%; background: #7fd6a4; }
+.ph-status .led.busy { background: var(--color-accent); animation: ph-breathe 1.6s ease-in-out infinite; }
+.ph-status .led.warn { background: #e3b34c; }
+.ph-status .right { margin-left: auto; }
+
+/* ── main (1a) ─────────────────────────────────────────────────────────────── */
+.ph-main { display: flex; flex-direction: column; gap: 14px; padding: 18px 18px 16px; }
+
+.ph-stage {
+  display: grid; place-items: center; padding: 16px 0 6px;
+  background: radial-gradient(70% 90% at 50% 45%,
+    color-mix(in srgb, var(--color-accent) 6%, transparent), transparent 72%);
+}
+.ph-cover {
+  width: 216px; border-radius: var(--radius-md); overflow: hidden;
+  position: relative; box-shadow: var(--shadow-lg); background: var(--color-surface);
+}
+.ph-cover img { width: 100%; height: 100%; object-fit: cover; }
+.ph-cover.busy { box-shadow: var(--shadow-lg), 0 0 34px color-mix(in srgb, var(--color-accent) 22%, transparent); }
+
+/* The denoise scan — an afterglow trail sweeping the cover, tied to real progress
+   rather than looping decoratively. */
+.ph-scan { position: absolute; left: 0; right: 0; height: 34%; pointer-events: none;
+  background: linear-gradient(to bottom, transparent,
+    color-mix(in srgb, var(--color-accent) 16%, transparent) 78%,
+    color-mix(in srgb, var(--color-accent) 42%, transparent) 99%, transparent); }
+.ph-scanline { position: absolute; left: 0; right: 0; height: 1px;
+  background: var(--color-accent); box-shadow: 0 0 10px var(--color-accent); pointer-events: none; }
+
+.ph-covermeta {
+  display: flex; gap: 8px; align-items: center; margin-top: 10px;
+  font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+.ph-covermeta .dot-sep { opacity: 0.6; }
+
+.ph-section { display: flex; flex-direction: column; gap: 8px; }
+.ph-sechead { display: flex; align-items: baseline; gap: 8px; }
+.ph-seclabel { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-accent); }
+.ph-sechint { font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+
+.ph-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ph-chip {
+  padding: 6px 11px; border-radius: 999px; font-size: 12px; cursor: pointer;
+  background: var(--color-surface); color: color-mix(in srgb, var(--color-text) 80%, transparent);
+  border: 0; font-family: inherit;
+}
+.ph-chip:hover { background: color-mix(in srgb, var(--color-text) 12%, transparent); }
+.ph-chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.ph-chipnote { font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 45%, transparent); min-height: 16px; }
+
+.ph-row { display: flex; align-items: center; gap: 10px; }
+.ph-row .grow { margin-left: auto; }
+.ph-actions { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
+.ph-eta { font-size: 11px; color: color-mix(in srgb, var(--color-text) 50%, transparent); }
+.ph-protnote { margin-left: auto; font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+
+/* ── empty state (1c) ──────────────────────────────────────────────────────── */
+.ph-empty { padding: 22px 20px 20px; height: 100%; }
+/* The design sizes the card to its content; in a real fixed-size window the drop
+   target should own the whole body instead of leaving dead space beneath it. */
+.ph-body { display: flex; flex-direction: column; }
+.ph-drop {
+  display: grid; place-items: center; min-height: 380px; height: 100%;
+  border: 1.5px dashed color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: var(--radius-lg);
+  background: radial-gradient(60% 55% at 50% 45%,
+    color-mix(in srgb, var(--color-accent) 5%, transparent), transparent 75%);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.ph-drop.over {
+  border-color: var(--color-accent);
+  background: radial-gradient(60% 55% at 50% 45%,
+    color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 75%);
+}
+.ph-dropinner { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 24px; }
+.ph-dropicon {
+  width: 74px; height: 98px; border-radius: 7px; position: relative;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+.ph-dropicon::before {
+  content: ""; position: absolute; inset: 10px 10px auto; height: 8px; border-radius: 3px;
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.ph-dropicon::after {
+  content: "↓"; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+  width: 30px; height: 30px; border-radius: 50%; background: var(--color-bg);
+  border: 1px solid var(--color-accent); display: grid; place-items: center;
+  color: var(--color-accent); font-size: 15px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+.ph-droptitle { font-family: var(--font-heading); font-size: 15px; color: var(--color-text); padding-top: 8px; }
+.ph-dropsub { font-size: 11.5px; line-height: 1.5; color: color-mix(in srgb, var(--color-text) 50%, transparent); max-width: 260px; }
+
+/* ── generating (1e) ───────────────────────────────────────────────────────── */
+.ph-gen { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 26px 20px 22px; }
+.ph-progwrap { width: 300px; display: flex; flex-direction: column; gap: 7px; }
+.ph-progtop, .ph-progbot { display: flex; justify-content: space-between; }
+.ph-progtop { font-size: 11px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
+.ph-progbot { font-size: 10px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+.ph-track { height: 4px; border-radius: 2px; background: var(--color-surface); position: relative; overflow: hidden; }
+.ph-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px;
+  background: linear-gradient(to right, color-mix(in srgb, var(--color-accent) 60%, transparent), var(--color-accent));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 60%, transparent);
+  transition: width 220ms ease;
+}
+
+/* ── mask editor (1d) ──────────────────────────────────────────────────────── */
+.ph-mask { display: grid; grid-template-columns: 1fr 148px; gap: 14px; padding: 16px 16px 14px; }
+.ph-maskstage { display: grid; place-items: center; }
+.ph-maskcanvas {
+  width: 252px; border-radius: var(--radius-md); overflow: hidden; position: relative;
+  box-shadow: var(--shadow-md); background: var(--color-surface); touch-action: none;
+}
+.ph-maskcanvas img { width: 100%; display: block; }
+.ph-maskcanvas canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair;
+  /* The mask paints as an accent-tinted overlay rather than opaque white, so the
+     artwork beneath stays readable while editing. */
+  opacity: 0.55; mix-blend-mode: screen;
+}
+.ph-masktools { display: flex; flex-direction: column; gap: 12px; }
+.ph-toolgroup { display: flex; flex-direction: column; gap: 6px; }
+.ph-toollabel { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent); }
+.ph-slider { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.ph-slider input { flex: 1; accent-color: var(--color-accent); height: 3px; }
+.ph-maskstats { margin-top: auto; display: flex; flex-direction: column; gap: 6px; font-size: 10px; color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.ph-maskfoot { display: flex; align-items: center; gap: 10px; padding: 11px 16px 13px; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.ph-maskwarn { margin-left: auto; font-size: 10px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+
+/* ── export dialog (1f) ────────────────────────────────────────────────────── */
+.ph-fmt {
+  display: flex; gap: 10px; padding: 11px 12px; border-radius: var(--radius-md);
+  background: var(--color-surface); cursor: pointer; border: 0; width: 100%;
+  text-align: left; font-family: inherit; color: inherit;
+}
+.ph-fmt[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.ph-fmt .mark { padding-top: 1px; opacity: 0.4; }
+.ph-fmt[aria-pressed="true"] .mark { opacity: 1; color: var(--color-accent); }
+.ph-fmt .col { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.ph-fmt .name { font-size: 13px; }
+.ph-fmt[aria-pressed="true"] .name { color: var(--color-accent); }
+.ph-fmt .desc { font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.ph-fmt .size { font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 75%, transparent); }
+.ph-fmt .size.warn { color: #e3b34c; }
+
+/* ── first-run download (1g) ───────────────────────────────────────────────── */
+.ph-setup { display: flex; flex-direction: column; gap: 18px; padding: 30px 34px 26px; }
+.ph-setuptitle { font-family: var(--font-heading); font-size: 17px; }
+.ph-setupbody { font-size: 12px; line-height: 1.55; color: color-mix(in srgb, var(--color-text) 55%, transparent); text-wrap: pretty; }
+.ph-dlrow { display: flex; flex-direction: column; gap: 6px; }
+.ph-dlhead { display: flex; justify-content: space-between; font-size: 11.5px; }
+.ph-dlhead .muted { color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+.ph-dlok { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.ph-dlok .check { color: #7fd6a4; }
+.ph-dlmeta { font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+/* Verifying is not downloading. The bar holds at full width — the bytes really are all
+   here — but drops the glow so a solid accent bar does not read as "done" while a 4.2 GB
+   hash is still running. */
+.ph-fill.verifying {
+  background: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  box-shadow: none;
+}
+
+/* ── settings (1h) ─────────────────────────────────────────────────────────── */
+.ph-settings { display: flex; flex-direction: column; gap: 20px; padding: 20px 24px 22px; }
+.ph-setgroup { display: flex; flex-direction: column; gap: 10px; }
+.ph-setrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ph-setrow .label { display: flex; flex-direction: column; gap: 2px; }
+.ph-setrow .label .t { font-size: 12.5px; }
+.ph-setrow .label .s { font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.ph-toggle {
+  width: 34px; height: 19px; border-radius: 10px; position: relative; cursor: pointer;
+  background: var(--color-neutral-800); border: 0; padding: 0; flex: none;
+}
+.ph-toggle[aria-pressed="true"] {
+  background: var(--color-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+.ph-toggle .knob {
+  position: absolute; left: 2.5px; top: 2.5px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--color-bg); transition: left 140ms ease;
+}
+.ph-toggle[aria-pressed="true"] .knob { left: 17.5px; }
+.ph-version { font-size: 10px; color: color-mix(in srgb, var(--color-text) 35%, transparent); padding-top: 2px; }
+
+/* ── misc ──────────────────────────────────────────────────────────────────── */
+.ph-error {
+  margin: 12px 18px; padding: 10px 12px; border-radius: var(--radius-md);
+  background: color-mix(in srgb, #b4404a 16%, transparent);
+  box-shadow: inset 0 0 0 1px #b4404a;
+  font-size: 11.5px; line-height: 1.5; user-select: text;
+}

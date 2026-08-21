@@ -1,0 +1,51 @@
+[package]
+name = "phosphor"
+version = "0.1.0"
+description = "Animated game cover art generator"
+authors = ["The Halfrican Software"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix is required so the lib name does not collide with the bin name on
+# Windows. See https://github.com/rust-lang/cargo/issues/8519
+name = "phosphor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Sidecar process management + the JSONL protocol over stdin/stdout (CLAUDE.md §2).
+tokio = { version = "1", features = ["process", "io-util", "fs", "sync", "rt", "macros", "time"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+
+# First-run model download (CLAUDE.md §3). reqwest is already in the tree via tauri, but
+# tauri enables it with no TLS backend, so the feature set has to be stated here.
+#
+# `native-tls` rather than `rustls`: reqwest 0.13's rustls path pulls aws-lc-rs, whose
+# build wants cmake + nasm on windows-msvc. native-tls is schannel on Windows - no crypto
+# toolchain, no vendored certs, and it trusts the store the user's OS already trusts.
+# (This does tie a Linux build to openssl-dev. Phosphor bundles NSIS only, so that is a
+# trade rather than a cost.)
+#
+# reqwest 0.13 renamed these: `rustls-tls` no longer exists and `default-tls` now means
+# rustls. Do not "fix" this back to the 0.11/0.12 spelling.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream", "http2", "system-proxy"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+[profile.release]
+# The GPU work happens in the Python sidecar, so the Rust side optimises for a small
+# binary rather than for speed.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
