@@ -39,7 +39,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis"
+      "nsis",
+      "msi"
     ],
     "publisher": "The Halfrican Software",
     "copyright": "The Halfrican Software",

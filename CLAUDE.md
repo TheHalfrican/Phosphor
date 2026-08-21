@@ -764,8 +764,18 @@ which renders `<x-dc>` documents), not application code. Do not port them.
 
 ### Before this is ready to share
 
-Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. **0.2.0** builds a
-40 MB installer that installs, downloads its runtime, generates, protects text and exports.
+Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. **0.2.0** builds both
+installers, which install, download the runtime on first run, generate, protect text and
+export:
+
+| target | size | |
+|---|---|---|
+| `Phosphor_0.2.0_x64-setup.exe` (NSIS) | 41.0 MB | per-user, no elevation |
+| `Phosphor_0.2.0_x64_en-US.msi` (WiX) | 53.4 MB | per-machine, wants admin, deployable by policy |
+
+MSI is only viable because the sidecar left the bundle. It packs payload into CAB, which has
+the same 2 GB ceiling that killed NSIS at 2.88 GB, so it would have failed identically had
+the freeze still been bundled.
 
 Still missing before it is worth pointing anyone at:
 
