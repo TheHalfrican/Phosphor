@@ -10,6 +10,19 @@ import { useEffect, useRef, useState } from "react";
  * Add paints protection, Erase removes it. Protected pixels are pasted back from the
  * source in every frame, so over-painting is the safe direction to err: the cost is a
  * region that does not animate, versus type that visibly deforms.
+ *
+ * HOW THE MASK IS STORED, AND WHY IT MATTERS
+ * ------------------------------------------
+ * The working canvas holds the accent colour in RGB and the mask strength in ALPHA. That
+ * is a deliberate change from painting flat white: a white mask blended over artwork was
+ * nearly impossible to read, and a mask you cannot see is a safety net you cannot check.
+ * Accent-on-artwork reads instantly on both bright type and dark backgrounds.
+ *
+ * The consequence is that alpha, not luminance, is the source of truth here, and the
+ * export has to convert: `buildMaskPng` writes alpha back out as greyscale, because
+ * `pipeline.protect` reads the mask with PIL's `convert("L")`, which uses RGB and ignores
+ * alpha entirely. Getting that backwards produces a mask that is uniformly white, which
+ * protects the whole frame and yields a completely static "animation".
  */
 
 type Props = {
@@ -25,16 +38,42 @@ type Props = {
   onBack: () => void;
 };
 
+type Shape = "brush" | "box";
+type Mode = "add" | "erase";
+
+/** Read the accent from the Nocturne token rather than hard-coding a hex (§7a). */
+function accentRgb(): [number, number, number] {
+  const css = getComputedStyle(document.documentElement)
+    .getPropertyValue("--color-accent")
+    .trim();
+  const c = document.createElement("canvas");
+  c.width = c.height = 1;
+  const ctx = c.getContext("2d");
+  if (!ctx) return [145, 132, 217];
+  ctx.fillStyle = css || "#9184d9";
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return [r, g, b];
+}
+
 export function MaskEditor({
   coverUrl, maskUrl, width, height,
   threshold, redetecting, onThresholdChange, onRedetect, onDone, onBack,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
-  const [tool, setTool] = useState<"add" | "erase">("add");
+  /** Canvas contents at the start of a box drag, so the preview can be redrawn live. */
+  const snapshot = useRef<ImageData | null>(null);
+  const origin = useRef<{ x: number; y: number } | null>(null);
+
+  const [shape, setShape] = useState<Shape>("brush");
+  const [mode, setMode] = useState<Mode>("add");
   const [brush, setBrush] = useState(44);
   const [coverage, setCoverage] = useState(0);
   const [regions, setRegions] = useState(0);
+  const accent = useRef<[number, number, number]>([145, 132, 217]);
+
+  useEffect(() => { accent.current = accentRgb(); }, []);
 
   // Load the detector's proposal as the starting point. Re-runs whenever a re-detect
   // produces a new mask, which deliberately discards manual edits — the design's
@@ -54,8 +93,23 @@ export function MaskEditor({
     // requesting CORS is all that was missing.
     img.crossOrigin = "anonymous";
     img.onload = () => {
+      // CRAFT hands back an opaque greyscale PNG. Re-encode it as accent + alpha so it is
+      // visible, and so brush, box and erase all operate on one representation.
+      const tmp = document.createElement("canvas");
+      tmp.width = width;
+      tmp.height = height;
+      const tctx = tmp.getContext("2d", { willReadFrequently: true });
+      if (!tctx) return;
+      tctx.drawImage(img, 0, 0, width, height);
+      const data = tctx.getImageData(0, 0, width, height);
+      const px = data.data;
+      const [ar, ag, ab] = accent.current;
+      for (let i = 0; i < px.length; i += 4) {
+        const lum = px[i];
+        px[i] = ar; px[i + 1] = ag; px[i + 2] = ab; px[i + 3] = lum;
+      }
       ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.putImageData(data, 0, 0);
       measure();
     };
     img.src = maskUrl;
@@ -73,12 +127,7 @@ export function MaskEditor({
     let on = 0, n = 0;
     for (let y = 0; y < height; y += step) {
       for (let x = 0; x < width; x += step) {
-        // Luminance AND alpha. CRAFT's mask arrives as an opaque greyscale PNG, so alpha
-        // alone reads 255 everywhere and would report 100% coverage on every cover.
-        // Brush strokes are opaque white and erases zero both, so the pair is correct for
-        // detected, painted and erased pixels alike.
-        const i = (y * width + x) * 4;
-        if (d[i] > 40 && d[i + 3] > 40) on++;
+        if (d[(y * width + x) * 4 + 3] > 40) on++;
         n++;
       }
     }
@@ -90,8 +139,7 @@ export function MaskEditor({
     for (let y = 0; y < height; y += step) {
       let any = false;
       for (let x = 0; x < width; x += step) {
-        const i = (y * width + x) * 4;
-        if (d[i] > 40 && d[i + 3] > 40) { any = true; break; }
+        if (d[(y * width + x) * 4 + 3] > 40) { any = true; break; }
       }
       if (any && !inBand) bands++;
       inBand = any;
@@ -99,30 +147,109 @@ export function MaskEditor({
     setRegions(bands);
   }
 
-  function paint(e: React.PointerEvent) {
+  /** Pointer position in canvas pixels. */
+  function at(e: React.PointerEvent) {
+    const c = canvasRef.current!;
+    const r = c.getBoundingClientRect();
+    return {
+      x: ((e.clientX - r.left) / r.width) * width,
+      y: ((e.clientY - r.top) / r.height) * height,
+      scale: width / r.width,
+    };
+  }
+
+  function fill(ctx: CanvasRenderingContext2D, draw: () => void) {
+    const [r, g, b] = accent.current;
+    ctx.globalCompositeOperation = mode === "add" ? "source-over" : "destination-out";
+    ctx.fillStyle = `rgb(${r} ${g} ${b})`;
+    draw();
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  function down(e: React.PointerEvent) {
     const c = canvasRef.current;
     if (!c) return;
     const ctx = c.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
-    const r = c.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * width;
-    const y = ((e.clientY - r.top) / r.height) * height;
-    // Scale the brush from screen px to canvas px so it feels the same size regardless
-    // of how the 252px preview maps onto a 768px-wide mask.
-    const rad = (brush / 2) * (width / r.width);
+    drawing.current = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
-    ctx.globalCompositeOperation = tool === "add" ? "source-over" : "destination-out";
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(x, y, rad, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
+    const p = at(e);
+    if (shape === "box") {
+      // Keep the pre-drag pixels so each preview frame starts clean rather than
+      // accumulating every intermediate rectangle.
+      snapshot.current = ctx.getImageData(0, 0, width, height);
+      origin.current = { x: p.x, y: p.y };
+      return;
+    }
+    paintBrush(e);
+  }
+
+  function move(e: React.PointerEvent) {
+    if (!drawing.current) return;
+    if (shape === "box") return previewBox(e);
+    paintBrush(e);
+  }
+
+  function paintBrush(e: React.PointerEvent) {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+    const p = at(e);
+    // Scale the brush from screen px to canvas px so it feels the same size regardless
+    // of how the preview maps onto a 768px-wide mask.
+    const rad = (brush / 2) * p.scale;
+    fill(ctx, () => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function previewBox(e: React.PointerEvent) {
+    const c = canvasRef.current;
+    if (!c || !snapshot.current || !origin.current) return;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+    const p = at(e);
+    const o = origin.current;
+    ctx.putImageData(snapshot.current, 0, 0);
+    fill(ctx, () => {
+      ctx.fillRect(Math.min(o.x, p.x), Math.min(o.y, p.y),
+                   Math.abs(p.x - o.x), Math.abs(p.y - o.y));
+    });
   }
 
   function end() {
     if (!drawing.current) return;
     drawing.current = false;
+    snapshot.current = null;
+    origin.current = null;
     measure();
+  }
+
+  /**
+   * Flatten the accent+alpha working canvas into the greyscale PNG the sidecar expects.
+   * `pipeline.protect` opens it with `convert("L")`, which reads RGB and discards alpha,
+   * so alpha has to become luminance here or the mask arrives meaningless.
+   */
+  function buildMaskPng(): string {
+    const c = canvasRef.current;
+    if (!c) return "";
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "";
+    const src = ctx.getImageData(0, 0, width, height);
+    const out = new ImageData(width, height);
+    for (let i = 0; i < src.data.length; i += 4) {
+      const a = src.data[i + 3];
+      out.data[i] = a; out.data[i + 1] = a; out.data[i + 2] = a; out.data[i + 3] = 255;
+    }
+    const flat = document.createElement("canvas");
+    flat.width = width;
+    flat.height = height;
+    flat.getContext("2d")!.putImageData(out, 0, 0);
+    return flat.toDataURL("image/png");
   }
 
   return (
@@ -141,12 +268,9 @@ export function MaskEditor({
                 ref={canvasRef}
                 width={width}
                 height={height}
-                onPointerDown={(e) => {
-                  drawing.current = true;
-                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  paint(e);
-                }}
-                onPointerMove={(e) => drawing.current && paint(e)}
+                style={{ cursor: shape === "box" ? "crosshair" : "cell" }}
+                onPointerDown={down}
+                onPointerMove={move}
                 onPointerUp={end}
                 onPointerLeave={end}
               />
@@ -160,27 +284,49 @@ export function MaskEditor({
                 <button
                   className="seg-opt"
                   style={{ flex: 1, padding: "5px 0" }}
-                  aria-pressed={tool === "add"}
-                  onClick={() => setTool("add")}
+                  aria-pressed={shape === "brush"}
+                  onClick={() => setShape("brush")}
+                >
+                  Brush
+                </button>
+                <button
+                  className="seg-opt"
+                  style={{ flex: 1, padding: "5px 0" }}
+                  aria-pressed={shape === "box"}
+                  onClick={() => setShape("box")}
+                >
+                  Box
+                </button>
+              </div>
+              {/* Box drags out a rectangle, which suits title lockups far better than
+                  tracing them by hand — most cover type sits in a band. */}
+              <div className="seg" style={{ display: "flex", fontSize: 11.5 }}>
+                <button
+                  className="seg-opt"
+                  style={{ flex: 1, padding: "5px 0" }}
+                  aria-pressed={mode === "add"}
+                  onClick={() => setMode("add")}
                 >
                   Add
                 </button>
                 <button
                   className="seg-opt"
                   style={{ flex: 1, padding: "5px 0" }}
-                  aria-pressed={tool === "erase"}
-                  onClick={() => setTool("erase")}
+                  aria-pressed={mode === "erase"}
+                  onClick={() => setMode("erase")}
                 >
                   Erase
                 </button>
               </div>
-              <label className="ph-slider">
-                <span>Brush</span>
-                <input
-                  type="range" min={8} max={90} value={brush}
-                  onChange={(e) => setBrush(+e.target.value)}
-                />
-              </label>
+              {shape === "brush" && (
+                <label className="ph-slider">
+                  <span>Size</span>
+                  <input
+                    type="range" min={8} max={90} value={brush}
+                    onChange={(e) => setBrush(+e.target.value)}
+                  />
+                </label>
+              )}
             </div>
 
             <div className="ph-toolgroup">
@@ -216,7 +362,7 @@ export function MaskEditor({
         <button
           className="btn btn-primary"
           style={{ padding: "7px 18px", fontSize: 13 }}
-          onClick={() => onDone(canvasRef.current?.toDataURL("image/png") ?? "")}
+          onClick={() => onDone(buildMaskPng())}
         >
           Done
         </button>
