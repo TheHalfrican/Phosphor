@@ -545,6 +545,29 @@ Design 1b (preset list beside a smaller cover) was not implemented; 1a covers th
 the cliff between 2.0 and 3.0, and the UI must not offer a setting known to wreck the
 artwork. If that mapping is ever changed, re-read §5 first.
 
+### Wide window, added 2026-08-21
+
+The canvas artboards are all 460px, and maximised that composition became a narrow centred
+column: measured at 1292x732 CSS px the cover rendered 208x310, about **7% of the screen**,
+with 542px of dead space each side. Because the cover is height-driven and the controls sit
+below it, widening the window barely grew the artwork.
+
+In a landscape window the non-artwork controls now sit **beside** the cover, which hands the
+full column height to the artwork: **208x310 -> 393x590**, 7% to 24% of the window. This is
+screen 1a's own premise (artwork first) holding at a size the artboards never covered.
+
+**The trigger is window shape, not width.** Which layout gives the bigger cover depends on
+aspect, because the portrait layout spends ~250px of *height* on controls while the wide one
+spends ~380px of *width*. `@media (min-width: 720px) and (min-aspect-ratio: 5 / 4)`. A width
+breakpoint alone was tried first and is wrong: it forces the split onto tall narrow windows
+where it makes the cover smaller.
+
+The grid's `max-width` tracks the viewport height rather than being a fixed number, so the
+artwork column is exactly as wide as a full-height 3:4 cover needs. A flat cap starves the
+cover on a tall landscape window and opens dead space on a short wide one.
+
+Applies to 1a and 1e. 1d was already two-column; the dialogs are centred and unaffected.
+
 ### Window
 
 460x720, `decorations: false`, custom title bar. Tauri v2 denies permissions by default, so
@@ -920,10 +943,9 @@ Still missing before it is worth pointing anyone at:
 
 - **Screenshots in the README.** They belong near the top, under the opening paragraphs and
   above "What it does". A tool whose whole value is visual currently shows none of it.
-- **A wide-window composition.** The screens are fluid and fill a tall window, but a
-  fullscreen window is still a centred column. Making it landscape needs a wrapper element
-  around the non-artwork controls, so it is a composition change rather than CSS and belongs
-  on the design canvas.
+- ~~**A wide-window composition.**~~ **Done 2026-08-21**, see §7a. The wrapper element this
+  entry predicted is `.ph-controls`. It was prototyped directly in the app rather than on the
+  canvas, since the canvas has no artboard wider than 460px to extend.
 - ~~**A 2:3 cover generated end to end.**~~ **Done 2026-08-21.** Halo ran the whole path in
   the app: 768x1152 generation, **113.4 s** on a debug build including model load, CRAFT
   found the title at 7.7% of frame, and the export offered 1200x1800. BO3 3:4 in the same

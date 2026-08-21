@@ -89,19 +89,38 @@ body { overflow: hidden; user-select: none; }
      unreadable line lengths. */
   width: 100%; max-width: 720px; margin-inline: auto;
 }
+/* Inert in the narrow window: a plain column that behaves exactly as if these elements
+   were still direct children of .ph-main. It exists so the wide layout below has
+   something to move. */
+.ph-controls { display: flex; flex-direction: column; gap: 14px; }
 
 .ph-stage {
-  display: grid; place-items: center; padding: 16px 0 6px;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 16px 0 6px;
   /* Takes the slack, so the cover grows with the window and the controls below keep
      their natural size. min-height:0 lets it shrink again on a short window. */
   flex: 1; min-height: 0;
   background: radial-gradient(70% 90% at 50% 45%,
     color-mix(in srgb, var(--color-accent) 6%, transparent), transparent 72%);
 }
+/* The box the artwork is fitted into, and a size container so .ph-cover below can be
+   sized against BOTH of its axes. It deliberately excludes .ph-covermeta: cqh must mean
+   the height available to the artwork, not the artwork plus its caption. */
+.ph-coverfit {
+  display: grid; place-items: center;
+  flex: 1; min-height: 0; min-width: 0; width: 100%;
+  container-type: size;
+}
 .ph-cover {
-  /* Height-driven; the inline aspect-ratio derives the width. The max-* pair takes over
-     when the window is wide but short, so the cover never overflows its stage. */
-  height: 100%; width: auto; max-height: 100%; max-width: 100%;
+  /* Contain-fit against both axes, the same treatment as .ph-maskcanvas and for the same
+     reason. The previous version was height-driven with `max-width: 100%` as a backstop,
+     and clamping the width does not shrink the definite height, so a tall narrow stage
+     put the box off-ratio and `object-fit: cover` cropped the artwork. That was
+     unreachable while the controls sat below the cover; the wide layout at the bottom of
+     this file makes the stage column narrow enough to reach it. */
+  aspect-ratio: var(--ar);
+  height: min(100cqh, 100cqw / var(--ar));
+  width: auto;
   border-radius: var(--radius-md); overflow: hidden;
   position: relative; box-shadow: var(--shadow-lg); background: var(--color-surface);
 }
@@ -122,6 +141,12 @@ body { overflow: hidden; user-select: none; }
   font-size: 10.5px; color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 .ph-covermeta .dot-sep { opacity: 0.6; }
+/* Game filenames are long and the meta row is only as wide as the cover, so let the name
+   be the thing that gives. Without this it wraps to three lines and drags the whole row
+   tall, which is most visible in the wide layout where the artwork column is narrow. */
+.ph-covername {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .ph-section { display: flex; flex-direction: column; gap: 8px; }
 .ph-sechead { display: flex; align-items: baseline; gap: 8px; }
@@ -196,10 +221,10 @@ body { overflow: hidden; user-select: none; }
   flex: 1; min-height: 0;
   width: 100%; max-width: 720px; margin-inline: auto;
 }
-/* The cover takes the slack here rather than sizing itself. Without a definite height on
-   this child, `height: 100%` on .ph-cover resolves to auto and the aspect-ratio box
-   expands to the full width of the window, which is what "blew up huge" looked like. */
-.ph-gen > .ph-cover { flex: 1; min-height: 0; }
+/* The cover's box takes the slack here rather than sizing itself. Without a definite
+   height on this child the aspect-ratio box expands to the full width of the window,
+   which is what "blew up huge" looked like. */
+.ph-gen > .ph-coverfit { flex: 1; min-height: 0; }
 .ph-progwrap { width: 300px; display: flex; flex-direction: column; gap: 7px; }
 .ph-progtop, .ph-progbot { display: flex; justify-content: space-between; }
 .ph-progtop { font-size: 11px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
@@ -355,4 +380,69 @@ body { overflow: hidden; user-select: none; }
   background: color-mix(in srgb, #b4404a 16%, transparent);
   box-shadow: inset 0 0 0 1px #b4404a;
   font-size: 11.5px; line-height: 1.5; user-select: text;
+}
+
+/* ── wide window (landscape composition) ───────────────────────────────────── */
+/* The shipped window is 460x720 and everything above is designed for it. Maximised on a
+   large display that composition becomes a narrow centred column: measured at 1292x732
+   CSS px the cover rendered 208x310, about 7% of the screen, with 542px of dead space on
+   each side. The cover is height-driven and the controls sit below it, so widening the
+   window barely grows the artwork.
+
+   In a landscape window the non-artwork controls move BESIDE the cover instead, which
+   hands the full column height to the artwork: measured 208x329 -> 442x589 at 1292x732,
+   from 7% of the window to 27%. Screen 1a was chosen over 1b because it puts the artwork
+   first (§7a); this keeps that true when the window is large.
+
+   THE CONDITION IS SHAPE, NOT WIDTH. Which layout gives the bigger cover depends on the
+   window's aspect, because the portrait layout spends roughly 250px of HEIGHT on the
+   controls while this one spends ~380px of WIDTH. A 760x1400 window has height to spare
+   and the portrait column wins easily; a 733x566 window does not, and side-by-side nearly
+   doubles the cover (245px against 144px, measured).
+
+   `min-aspect-ratio: 5/4` is where the trade turns over. A plain `min-width` cannot
+   express it: an early version used 720px alone, which would have forced the landscape
+   layout onto tall narrow windows where it makes the artwork smaller. The 720px floor
+   stays as well, so a small window is never split into two cramped columns.
+
+   Everything here is scoped to the media query, so the 460px layout is untouched. */
+@media (min-width: 720px) and (min-aspect-ratio: 5 / 4) {
+  .ph-main,
+  .ph-gen {
+    display: grid;
+    /* Artwork takes the slack; the controls get a readable, bounded column rather than
+       stretching to the full width of a TV. */
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 26px;
+    align-items: stretch;
+    padding: 20px 26px 18px;
+    /* Capped to exactly what a full-height cover needs, rather than to a fixed number.
+
+       A wider grid does not make a height-limited cover any bigger; it only opens a gap
+       between the artwork and its own controls until the two stop reading as one thing.
+       But a FIXED cap fails the other way on a tall landscape window: at 1600x1100 a flat
+       940 leaves the artwork column 482px, where the portrait layout would have given 562.
+       So the cap tracks the height instead: the artwork column gets `(viewport height less
+       the chrome) x 0.75`, which is the width of a full-height 3:4 cover, and the rest is
+       the control column, the gap and the padding (380 + 26 + 52). A 2:3 cover leaves a
+       little slack, which is the right way round. */
+    max-width: min(1400px, calc((100vh - 110px) * 0.75 + 458px));
+  }
+
+  /* The stage already fills its grid row, so its own top padding just pushes the artwork
+     off centre. */
+  .ph-stage { padding: 0; }
+
+  /* Centred, with the groups given more air than the 460px window allows.
+     `space-between` was tried and is worse: with only three groups against a 590px cover
+     it flings Motion to the top and Animate to the bottom and strands the strength row
+     alone in the middle. Centring keeps the cluster reading as one panel, and the extra
+     gap stops it looking marooned in the column. */
+  .ph-controls { justify-content: center; gap: 26px; }
+
+  /* 1e keeps the same split: artwork left, progress right, both vertically centred. */
+  .ph-gen { align-items: center; }
+  .ph-gen > .ph-coverfit { height: 100%; }
+  .ph-progwrap { width: 100%; }
 }

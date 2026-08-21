@@ -607,7 +607,9 @@ export default function App() {
 
         {screen === "generating" && (
           <div className="ph-gen">
-            <Cover path={cover} aspect={aspect} busy scanAt={total ? step / total : 0} />
+            <div className="ph-coverfit">
+              <Cover path={cover} aspect={aspect} busy scanAt={total ? step / total : 0} />
+            </div>
             <div className="ph-progwrap">
               <div className="ph-progtop">
                 <span>
@@ -629,10 +631,15 @@ export default function App() {
         {screen === "main" && (
           <div className="ph-main">
             <div className="ph-stage">
-              <Cover path={cover} aspect={aspect} />
+              {/* The cover's own box. It is separate from the meta line because it is a
+                  size container, and cqh has to mean "the height available to the
+                  artwork" rather than "the artwork plus its caption". */}
+              <div className="ph-coverfit">
+                <Cover path={cover} aspect={aspect} />
+              </div>
               <div className="ph-covermeta">
                 <span className="tag tag-neutral" style={{ fontSize: 9 }}>{aspect}</span>
-                <span>{cover.split(/[\\/]/).pop()}</span>
+                <span className="ph-covername">{cover.split(/[\\/]/).pop()}</span>
                 <span className="dot-sep">·</span>
                 <span>exports {outSize}</span>
                 <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 6px" }} onClick={pickCover}>
@@ -641,6 +648,11 @@ export default function App() {
               </div>
             </div>
 
+            {/* Everything that is not the artwork, wrapped so a wide window can put it
+                BESIDE the cover instead of below it. In a narrow window this is an inert
+                flex column and the layout is exactly as designed; the two-column form is
+                scoped to a min-width media query in App.css. */}
+            <div className="ph-controls">
             <div className="ph-section">
               <div className="ph-sechead">
                 <span className="ph-seclabel">Motion</span>
@@ -695,6 +707,7 @@ export default function App() {
                 <span className="ph-eta">generated in {gen.seconds}s</span>
               </div>
             )}
+            </div>
           </div>
         )}
       </div>
@@ -722,9 +735,11 @@ export default function App() {
 /* ── pieces ─────────────────────────────────────────────────────────────────── */
 
 function Cover({ path, aspect, busy, scanAt }: { path: string; aspect: string; busy?: boolean; scanAt?: number }) {
-  const ratio = aspect === "3:4" ? "3 / 4" : "2 / 3";
+  // A bare number, not "3 / 4": App.css divides by it to fit the cover against both axes
+  // of its container. Same contract as MaskEditor's `--ar`.
+  const ar = aspect === "3:4" ? 0.75 : 2 / 3;
   return (
-    <div className={`ph-cover${busy ? " busy" : ""}`} style={{ aspectRatio: ratio }}>
+    <div className={`ph-cover${busy ? " busy" : ""}`} style={{ "--ar": ar } as React.CSSProperties}>
       {path ? <img src={convertFileSrc(path)} alt="" draggable={false} /> : null}
       {busy && (
         <>
