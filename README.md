@@ -109,6 +109,21 @@ and cancellable.
 **Not yet packaged.** The Python sidecar still needs to be frozen with PyInstaller before
 there is an installer to hand anyone. Building from source works today.
 
+A note on scope, so nobody wastes an evening: Phosphor targets **Windows with an NVIDIA GPU
+of roughly 10 GB or more**. AMD, Intel Arc, Apple silicon and smaller cards are not
+supported and are not planned. Bug reports against the supported configuration are very
+welcome.
+
+---
+
+## Part of The Halfrican Software
+
+Phosphor is free, and it is one of a set of small tools built around **RetroVoid**, a paid
+game library manager from The Halfrican Software. Phosphor works with any launcher that
+takes custom grid art, and RetroVoid is simply where it fits most naturally.
+
+More of these are planned. If you find this one useful, that is the whole idea.
+
 ---
 
 ## Third-party components
@@ -122,6 +137,12 @@ there is an installer to hand anyone. Building from source works today.
 
 ## Licence
 
-Not yet licensed, so all rights reserved. Phosphor is intended for commercial release under
-**The Halfrican Software**, so the source is published here to be read rather than reused.
-If you want to do something with it, open an issue and ask.
+[Apache-2.0](LICENSE). Use it, fork it, learn from it.
+
+Apache rather than MIT for one reason worth naming: it grants the code and explicitly does
+not grant the trademarks. The names *Phosphor*, *RetroVoid* and *The Halfrican Software*
+stay put, so a fork cannot present itself as this project. Everything else is yours.
+
+Note that Phosphor never redistributes model weights. They are downloaded from Hugging Face
+on first run under their own licences, which keeps this repository's licensing independent
+of theirs.

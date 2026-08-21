@@ -55,9 +55,13 @@ decision to revisit.
 
 **Why a custom diffusers server rather than bundling ComfyUI:**
 
-1. ComfyUI is GPL-3.0. This app is intended for commercial release under The Halfrican
-   Software. Sidecar-over-IPC is *probably* aggregation rather than derivation, but
-   "probably" is a bad foundation for a paid product.
+1. ComfyUI is GPL-3.0. Sidecar-over-IPC is *probably* aggregation rather than
+   derivation, but "probably" is a bad foundation for a distribution decision.
+   **Note:** this originally read "intended for commercial release ... a bad foundation
+   for a paid product". Phosphor is now free and Apache-2.0 (§10), which does *not*
+   invalidate the reasoning: refusing an **imposed** copyleft is exactly what left the
+   licence free to be chosen deliberately later. RetroVoid is the paid product; Phosphor
+   is a free tool in the same ecosystem.
 2. We bypass the text encoder entirely (see §4), which was most of what ComfyUI's
    ecosystem was buying us.
 3. Installer size. ComfyUI drags in a large dependency tree we don't use.
@@ -582,6 +586,7 @@ assumptions are the only real risk in this project.
 | Mask must stay user-editable | Detection failures are silent — a miss ships mangled type rather than erroring. |
 | No LoRA-on-GGUF | Q6_K stores a 3072-wide row as 2520 packed bytes; fusing a logical-shaped delta fails. Ship a pre-distilled GGUF instead if the distill is ever wanted. |
 | Download to `.part`, rename only after the hash passes | The final path then only ever exists with verified contents, which is what lets startup stay a cheap size check rather than rehashing 7 GB every launch. |
+| Phosphor is free and Apache-2.0; RetroVoid is paid | Free, self-contained tools are the draw into The Halfrican Software's ecosystem, and Phosphor suits that unusually well because its output is *displayed* — every cover made keeps advertising. Apache rather than MIT for its §6: it grants the code and explicitly withholds the trademarks, so a fork cannot present itself as Phosphor. Weights are never redistributed (§3), so repo licensing stays independent of the models'. |
 | `native-tls` for the downloader, not rustls | **reqwest 0.13 renamed its TLS features** — `rustls-tls` no longer exists and `default-tls` now *means* rustls, whose provider is aws-lc-rs (wants cmake + nasm on windows-msvc). `native-tls` is schannel: no crypto toolchain, no vendored roots, and it trusts what Windows already trusts. Do not "fix" this back to the 0.11/0.12 spelling. |
 
 ---
@@ -689,6 +694,21 @@ The UI comes from a Claude Design project. To reopen it:
 Readable through the `DesignSync` MCP (`list_files` / `get_file` with
 `projectId: (removed)`). `support.js` and `_ds_bundle.js` in that
 project are the canvas editor's own runtime — not app code, do not port them.
+
+### Launch plan
+
+Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0, but **not announced
+yet, deliberately**. Until the sidecar is frozen there is no installer, so the "free tool"
+still requires Rust, Python and a ~19 GB dev setup — a developer artifact rather than
+something to hand a RetroVoid user. The funnel only switches on with a downloadable
+installer, which is the next task and expected shortly.
+
+Still to land before announcing:
+
+- the PyInstaller freeze and an installer (below)
+- **screenshots in the README** — Noah is adding these; they belong near the top, under the
+  opening paragraphs and above "What it does". A tool whose entire value is visual currently
+  shows nothing.
 
 ### Next step
 
