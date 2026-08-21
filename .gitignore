@@ -10,6 +10,8 @@ dist-ssr
 build/
 # PyInstaller output. NOT dist/ - that belongs to Vite, which empties it.
 sidecar-dist/
+# Where a dev-run first-run download unpacks the frozen sidecar.
+sidecar-runtime/
 
 # ── rust ──────────────────────────────────────────────────────────────────────
 src-tauri/target

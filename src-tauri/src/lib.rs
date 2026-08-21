@@ -92,7 +92,10 @@ fn bundled_binary(app: &AppHandle, stem: &str) -> CmdResult<PathBuf> {
     // can package, so it is downloaded and unpacked into app data on first run, next to
     // the models. See models.rs and CLAUDE.md 12.
     if let Ok(data) = models::data_root(app) {
-        candidates.push(data.join("sidecar").join(&name));
+        // "sidecar-runtime", not "sidecar": in dev the root is the repo, and `sidecar/`
+        // there is the Python SOURCE directory. Unpacking 5838 frozen files over it would
+        // bury inference_server.py in its own build output.
+        candidates.push(data.join("sidecar-runtime").join(&name));
     }
 
     candidates

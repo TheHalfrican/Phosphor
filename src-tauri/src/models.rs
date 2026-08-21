@@ -1043,6 +1043,81 @@ mod tests {
         std::fs::remove_dir_all(&root).ok();
     }
 
+    /// The whole chain against the real release: download ~2 GB from GitHub, verify both
+    /// checksums, unpack, write markers, report complete.
+    ///
+    /// `#[ignore]` because it moves 2 GB. Run it deliberately after any sidecar rebuild or
+    /// re-upload:
+    ///
+    /// ```text
+    /// cargo test --lib -- --ignored --nocapture downloads_and_unpacks_the_real_sidecar
+    /// ```
+    #[tokio::test]
+    #[ignore]
+    async fn downloads_and_unpacks_the_real_sidecar() {
+        let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("assets")
+            .join("models.json");
+        let full = Manifest::load(&manifest_path).expect("read models.json");
+
+        let files: Vec<ModelFile> = full
+            .files
+            .iter()
+            .filter(|f| f.unpack_to.is_some())
+            .cloned()
+            .collect();
+        assert_eq!(files.len(), 2, "expected two sidecar parts");
+        let manifest = manifest_of(files.clone());
+
+        let root = tmp_root("realsidecar");
+        let (sink, seen) = collecting();
+
+        let out = download_all(sink, &manifest, &root, Arc::new(AtomicBool::new(false)))
+            .await
+            .expect("download failed");
+
+        assert!(!out.cancelled);
+        assert!(out.status.complete, "manifest should report complete");
+
+        let dir = root.join("sidecar-runtime");
+        let exe = dir.join("phosphor-sidecar.exe");
+        assert!(exe.exists(), "entry point missing after unpack");
+        assert!(dir.join("_internal").is_dir(), "_internal missing after unpack");
+
+        // Both archives are deleted once extracted; keeping them would cost 2 GB forever.
+        for f in &files {
+            assert!(!root.join(&f.path).exists(), "{} was not cleaned up", f.path);
+            assert!(dir.join(format!(".phosphor-{}.sha256", f.key)).exists());
+        }
+
+        let n = walkdir_count(&dir);
+        assert!(n > 5000, "expected the full tree, found {n} files");
+
+        let events = seen.lock().unwrap();
+        assert!(events.iter().any(|e| e.stage == "unpack"), "no unpack progress reported");
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    fn walkdir_count(dir: &Path) -> usize {
+        let mut n = 0;
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
     #[tokio::test]
     async fn cancelling_before_the_first_byte_leaves_nothing_published() {
         let root = tmp_root("cancel");

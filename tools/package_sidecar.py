@@ -15,8 +15,12 @@ would break it. Two parts sit near 1 GB each and the cliff goes away.
 Each part is a COMPLETE, INDEPENDENT zip, not a byte-split of one archive. That matters:
 the downloader verifies and extracts each entry on its own, so a part can fail, resume and
 retry without touching the other. Byte-splitting would force both to land before anything
-could be checked. Both parts declare `unpack_to: "sidecar"` and extract into the same
-directory, which needs no code beyond what the manifest already does.
+could be checked. Both parts declare `unpack_to: "sidecar-runtime"` and extract into the
+same directory, which needs no code beyond what the manifest already does.
+
+Note "sidecar-runtime" rather than "sidecar": in a dev run the download root is the repo,
+and `sidecar/` there holds the Python source. Unpacking 5838 frozen files over it would
+bury inference_server.py in its own build output.
 
 Files are distributed largest-first into whichever part is currently smallest, which keeps
 the two within a few percent of each other without trying to model the compression ratio.
@@ -98,11 +102,11 @@ def main():
 
         entries.append({
             "key": f"sidecar-part{i}",
-            "path": f"sidecar/{out.name}",
+            "path": f"sidecar-runtime/{out.name}",
             "url": f"{GITHUB_RELEASE}/{args.tag}/{out.name}",
             "bytes": size,
             "sha256": sha256(out),
-            "unpack_to": "sidecar",
+            "unpack_to": "sidecar-runtime",
             "note": (f"Frozen Python inference sidecar, part {i} of {args.parts} "
                      f"(torch + CUDA). Too large for any Windows installer format, so it is "
                      f"downloaded and unpacked on first run. Each part is an independent "

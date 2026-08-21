@@ -56,20 +56,20 @@
     },
     {
       "key": "sidecar-part1",
-      "path": "sidecar/phosphor-sidecar-1of2.zip",
+      "path": "sidecar-runtime/phosphor-sidecar-1of2.zip",
       "url": "https://github.com/TheHalfrican/Phosphor/releases/download/v0.1.0/phosphor-sidecar-1of2.zip",
       "bytes": 1064183817,
       "sha256": "ab05c00b1b652c4f8d104a3c400c3987a4989ab507b266c00c87ff97cde60853",
-      "unpack_to": "sidecar",
+      "unpack_to": "sidecar-runtime",
       "note": "Frozen Python inference sidecar, part 1 of 2 (torch + CUDA). Too large for any Windows installer format, so it is downloaded and unpacked on first run. Each part is an independent zip extracting into the same directory."
     },
     {
       "key": "sidecar-part2",
-      "path": "sidecar/phosphor-sidecar-2of2.zip",
+      "path": "sidecar-runtime/phosphor-sidecar-2of2.zip",
       "url": "https://github.com/TheHalfrican/Phosphor/releases/download/v0.1.0/phosphor-sidecar-2of2.zip",
       "bytes": 995804822,
       "sha256": "73369d57095ab8be62070e49ec84d5ac5ab765d36801bb1984dfccba5fc65b6d",
-      "unpack_to": "sidecar",
+      "unpack_to": "sidecar-runtime",
       "note": "Frozen Python inference sidecar, part 2 of 2 (torch + CUDA). Too large for any Windows installer format, so it is downloaded and unpacked on first run. Each part is an independent zip extracting into the same directory."
     }
   ]
