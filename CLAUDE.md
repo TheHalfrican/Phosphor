@@ -875,10 +875,8 @@ Two things found in passing that are worth knowing:
   uninstalling either one will leave the other's shortcut dangling. Worth deciding which
   installer is the supported one before pointing anyone at the release.
 
-Minor, and a design question rather than a bug: the icon is darker than a typical pin.
-Measured on the pinned grid, mean luminance **44 against a neighbour average of 70**, with
-4% of its pixels above mid-grey against 18%. It is not an outlier (Cheat Engine and LocalSend
-are dimmer) but a dark card with thin light bars does recede on Windows' dark acrylic.
+The icon looked washed out on the pin, which was chased separately and **fixed the same
+day, but not by making it brighter**. See "The icon" below.
 
 **3. First-run setup errored on Download, then worked after a restart.** Error text was not
 captured, so this needs reproducing before it can be diagnosed. The installed app writes no
@@ -922,6 +920,32 @@ looks like.
 
 `icon.ico` carries **256/128/96/64/48/40/32/24/20/16, largest first**, and both the sizes
 and the order matter.
+
+### The decay ramp, lifted 2026-08-21
+
+The mark read washed out on a Start Menu pin. The artboard's `full` opacities ran
+**0.06 / 0.12 / 0.22 / 0.38 / 0.62**, and the first two sit below the threshold where a
+`#9184d9` bar separates from the `#181b30` card, so five echoes rendered as roughly two.
+The mark read as one bright bar plus noise rather than as a trail. They are now
+**0.15 / 0.23 / 0.34 / 0.48 / 0.68**: the same shape, with the falloff eased from 1.6-2.0x
+per step to 1.4-1.5x, decaying into something visible instead of into nothing.
+
+**The fix is legibility, not brightness, and the difference matters.** Mean luminance only
+moves 41.8 to 43.1, and chasing the number actively makes the icon worse. Both obvious
+brightness levers were built and measured:
+
+| tried | mean luminance | verdict |
+|---|---|---|
+| lift `CARD_FILL` to `#1f233c` | 47.1 | **worse.** Higher number, lower bar-to-card contrast, mark reads flatter |
+| add a blurred afterglow behind the head | 47.2 | no visible change at icon sizes |
+| lift the decay ramp | 43.1 | **the one that works** |
+
+The dark card is load-bearing: it is what makes the bars read as emissive. Do not lighten it
+to chase a luminance figure.
+
+Only `full` needed this, which is why **sizes 48 and below are byte-identical** before and
+after. `mid` and `small` already start at 0.15 and 0.35, having been drawn for legibility at
+size rather than transcribed from the artboard.
 
 The sizes: `tauri icon` stopped at 64 and then jumped to 256, so a display at 300% scaling —
 which wants about 96px — upscaled the 64px entry.

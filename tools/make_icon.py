@@ -51,10 +51,25 @@ BAR_Y, BAR_H = -20, 168
 
 # Straight off the three drawings in the 2a artboard. (x, width, opacity); opacity None is
 # the bright head.
+#
+# `full`'s decay ramp was lifted 2026-08-21. The artboard values ran 0.06/0.12/0.22/0.38/
+# 0.62, and the first two are below the threshold where a purple bar separates from the
+# #181b30 card, so the mark read as one bright bar plus some noise rather than as a trail
+# of five echoes. The ramp now starts at 0.15 and keeps roughly the same falloff per step
+# (1.4-1.5x against the original 1.6-2.0x), so it still decays, it just decays into
+# something visible.
+#
+# This came out of the Start Menu pin looking washed out. Note the fix is NOT brightness:
+# lifting CARD_FILL raises mean luminance but lowers the bar-to-card contrast and reads
+# *worse*, and a blurred glow behind the head is invisible at icon sizes. Both were tried
+# and measured. The dark card is load-bearing; do not lighten it to chase a number.
+#
+# `mid` and `small` already start at 0.15 and 0.35, which is why only `full` needed this,
+# and why sizes 48 and below are unchanged.
 VARIANTS = {
     "full": dict(
-        bars=[(10, 5, 0.06), (20, 5, 0.12), (30, 5, 0.22),
-              (40, 5, 0.38), (50, 5, 0.62), (60, 6, None)],
+        bars=[(10, 5, 0.15), (20, 5, 0.23), (30, 5, 0.34),
+              (40, 5, 0.48), (50, 5, 0.68), (60, 6, None)],
         stroke=2.0, radius=14, bar_r=2.5,
     ),
     "mid": dict(
