@@ -384,12 +384,22 @@ async fn export(
     gif: Option<bool>,
 ) -> CmdResult<String> {
     // 1. Text protection (§5a). Skipped only if the user cleared the mask entirely.
+    let mut mask_tmp: Option<PathBuf> = None;
     let frames_dir = if let Some(mask) = mask.filter(|m| !m.is_empty()) {
+        // The mask is edited on a canvas inside the webview, so it can only come across as
+        // a data URL. The sidecar's contract is a *path* (§2) - `pipeline.protect` opens it
+        // with PIL - so materialise it here rather than teaching the sidecar about data
+        // URLs. Handing the URL straight through fails as
+        // `OSError: [Errno 22] Invalid argument: 'data:image/png;base64,...'`.
+        let path = write_data_url_png(&mask)?;
+        let path_str = path.to_string_lossy().into_owned();
+        mask_tmp = Some(path);
+
         let sc = sc(&state).await?;
         let v = sc
             .request(
                 "protect",
-                json!({ "frames_dir": frames_dir, "source": source, "mask": mask }),
+                json!({ "frames_dir": frames_dir, "source": source, "mask": path_str }),
             )
             .await
             .map_err(err)?;
@@ -430,7 +440,27 @@ async fn export(
     };
 
     let _ = std::fs::remove_dir_all(&staging);
+    if let Some(p) = mask_tmp {
+        let _ = std::fs::remove_file(p);
+    }
     result.map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Decode a `data:image/png;base64,...` URL into a temp PNG and return its path.
+fn write_data_url_png(data_url: &str) -> CmdResult<PathBuf> {
+    use base64::Engine;
+
+    let b64 = data_url
+        .split_once(",")
+        .map(|(_, rest)| rest)
+        .ok_or_else(|| "mask is not a data URL".to_string())?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64.as_bytes())
+        .map_err(|e| format!("mask is not valid base64: {e}"))?;
+
+    let path = std::env::temp_dir().join(format!("phosphor_mask_{}.png", uuid::Uuid::new_v4()));
+    std::fs::write(&path, bytes).map_err(err)?;
+    Ok(path)
 }
 
 /// Minimal PNG header read — avoids pulling an image crate into the Rust side just to
@@ -467,4 +497,37 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The mask crosses from the webview as a data URL, but the sidecar opens it with PIL
+    /// and needs a path. Passing the URL through produced
+    /// `OSError: [Errno 22] Invalid argument: 'data:image/png;base64,...'` at export time.
+    ///
+    /// That bug was unreachable until the canvas stopped being tainted: `toDataURL()` threw,
+    /// so the mask was always empty and protection was silently skipped. Worth a test
+    /// precisely because nothing else fails loudly when it breaks.
+    #[test]
+    fn a_mask_data_url_becomes_a_real_png_file() {
+        // 1x1 PNG.
+        const PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        let url = format!("data:image/png;base64,{PNG_B64}");
+
+        let path = write_data_url_png(&url).expect("decode");
+        let bytes = std::fs::read(&path).expect("written");
+
+        assert_eq!(&bytes[1..4], b"PNG", "should be a real PNG on disk");
+        assert!(path.extension().is_some_and(|e| e == "png"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_mask_that_is_not_a_data_url_is_refused() {
+        assert!(write_data_url_png(r"C:\somewhere\mask.png").is_err());
+        assert!(write_data_url_png("data:image/png;base64,not valid base64!!").is_err());
+    }
 }

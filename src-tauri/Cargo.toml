@@ -46,6 +46,10 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # complexity for nothing.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+# Decoding the mask the webview hands over. The canvas lives in the webview, so its only
+# way out is a data URL; the sidecar contract stays "a path to a file" (§2).
+base64 = "0.22"
+
 [profile.release]
 # The GPU work happens in the Python sidecar, so the Rust side optimises for a small
 # binary rather than for speed.
