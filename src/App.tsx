@@ -105,6 +105,11 @@ export default function App() {
   const [format, setFormat] = useState<Format>("webp");
   const [exporting, setExporting] = useState(false);
   const [autoProtect, setAutoProtect] = useState(true);
+  /* Half-size export. Added because a launcher scrolling a grid of full-size animated
+     covers decodes 2.43 Mpx per frame, and halving each axis quarters that. Full stays the
+     default: the target display is a large-format TV where covers are viewed near full
+     size (CLAUDE.md §5). */
+  const [half, setHalf] = useState(false);
 
   const startedAt = useRef(0);
 
@@ -206,7 +211,12 @@ export default function App() {
 
   const active = useMemo(() => presets.find((p) => p.id === preset), [presets, preset]);
   const aspect = coverSize ? (Math.abs(coverSize[0] / coverSize[1] - 0.75) < Math.abs(coverSize[0] / coverSize[1] - 2 / 3) ? "3:4" : "2:3") : "3:4";
-  const outSize = aspect === "3:4" ? "1350×1800" : "1200×1800";
+  /* Full is the SteamGridDB grid size; half is exactly half of each axis, so 675×900 and
+     600×900. The ratio always comes from the source, so scale is the only size choice the
+     user makes. Kept in step with `Aspect::out_size` in src-tauri/src/encode.rs. */
+  const fullSize: [number, number] = aspect === "3:4" ? [1350, 1800] : [1200, 1800];
+  const outDims: [number, number] = half ? [fullSize[0] / 2, fullSize[1] / 2] : fullSize;
+  const outSize = `${outDims[0]}×${outDims[1]}`;
 
   /* ── cover intake ─────────────────────────────────────────────────────────── */
   const loadCover = useCallback((path: string) => {
@@ -291,6 +301,7 @@ export default function App() {
         outPath: dest,
         // "steam" takes the WebP path; only the filename differs.
         gif: format === "gif",
+        half,
       });
       setShowExport(false);
     } catch (e) {
@@ -689,6 +700,9 @@ export default function App() {
         <ExportDialog
           name={cover.split(/[\\/]/).pop() ?? ""}
           outSize={outSize}
+          fullDims={fullSize}
+          half={half}
+          setHalf={setHalf}
           format={format}
           setFormat={setFormat}
           exporting={exporting}
@@ -751,12 +765,33 @@ function DropZone({ onPick, onFile }: { onPick: () => void; onFile: (p: string) 
   );
 }
 
+/* Rough file sizes, 64 frames, WebP q75 (CLAUDE.md §7). Content moves these a lot: at full
+   size BO3 is 5.97 MB and Halo 3.78 MB, so treat them as an order of magnitude, which is
+   all the "≈" ever claimed.
+
+   Half is NOT a quarter of full despite being a quarter of the pixels. Measured
+   2026-08-21: WebP half lands at 47% of full on BO3 and 36% on Halo, because downscaling
+   raises per-pixel entropy and the frame count is unchanged. The 4x saving is in *decode*
+   work, which is what makes a launcher grid scroll; the file-size saving is about 2x. Do
+   not "correct" these to full/4. */
+const EST_MB: Record<"webp" | "gif", { full: number; half: number }> = {
+  webp: { full: 6.2, half: 2.9 },
+  gif: { full: 44.4, half: 12.0 },
+};
+
 function ExportDialog(props: {
-  name: string; outSize: string; format: Format;
+  name: string; outSize: string; fullDims: [number, number];
+  half: boolean; setHalf: (h: boolean) => void; format: Format;
   setFormat: (f: Format) => void; exporting: boolean;
   onCancel: () => void; onExport: () => void;
 }) {
-  const { name, outSize, format, setFormat, exporting, onCancel, onExport } = props;
+  const { name, outSize, fullDims, half, setHalf, format, setFormat, exporting, onCancel, onExport } = props;
+  const est = (k: "webp" | "gif") => {
+    const mb = half ? EST_MB[k].half : EST_MB[k].full;
+    return mb < 10 ? `≈ ${mb.toFixed(1)} MB` : `≈ ${Math.round(mb)} MB`;
+  };
+  const gifRatio = Math.round((half ? EST_MB.gif.half : EST_MB.gif.full)
+    / (half ? EST_MB.webp.half : EST_MB.webp.full));
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog" style={{ width: 372 }} onClick={(e) => e.stopPropagation()}>
@@ -765,6 +800,35 @@ function ExportDialog(props: {
           <div style={{ fontSize: 11, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>
             {name} · 2.7 s · 64 frames · {outSize}
           </div>
+        </div>
+
+        {/* Scale, not ratio. The ratio comes from the source cover and is never a choice;
+            offering one would let a 3:4 size be picked for a 2:3 cover. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span className="ph-toollabel">Size</span>
+          <div className="seg" style={{ display: "flex", fontSize: 11.5 }}>
+            <button
+              className="seg-opt"
+              style={{ flex: 1, padding: "5px 0" }}
+              aria-pressed={!half}
+              onClick={() => setHalf(false)}
+            >
+              {fullDims[0]}×{fullDims[1]}
+            </button>
+            <button
+              className="seg-opt"
+              style={{ flex: 1, padding: "5px 0" }}
+              aria-pressed={half}
+              onClick={() => setHalf(true)}
+            >
+              {fullDims[0] / 2}×{fullDims[1] / 2}
+            </button>
+          </div>
+          <span style={{ fontSize: 10.5, color: "color-mix(in srgb, var(--color-text) 45%, transparent)" }}>
+            {half
+              ? "A quarter of the pixels to decode, so launcher grids scroll smoothly."
+              : "Full grid size. Sharpest, but heavier for a launcher to scroll."}
+          </span>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -776,7 +840,7 @@ function ExportDialog(props: {
                 <span className="tag tag-accent" style={{ fontSize: 9 }}>recommended</span>
               </span>
               <span className="desc">Full color, smallest file. Works in RetroVoid, Playnite, ES-DE.</span>
-              <span className="size">≈ 6 MB</span>
+              <span className="size">{est("webp")}</span>
             </span>
           </button>
 
@@ -791,7 +855,7 @@ function ExportDialog(props: {
                 The same WebP, named .png. Steam checks the extension; its Chromium UI reads
                 the header and animates it anyway.
               </span>
-              <span className="size">≈ 6 MB · identical to WebP</span>
+              <span className="size">{est("webp")} · identical to WebP</span>
             </span>
           </button>
 
@@ -800,7 +864,7 @@ function ExportDialog(props: {
             <span className="col">
               <span className="name">GIF</span>
               <span className="desc">For launchers that can't play WebP. 256 colors — gradients will band.</span>
-              <span className="size warn">≈ 44 MB — 7× larger than WebP</span>
+              <span className="size warn">{est("gif")}, {gifRatio}× larger than WebP</span>
             </span>
           </button>
         </div>

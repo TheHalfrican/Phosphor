@@ -4,17 +4,40 @@
 //! x264, no x265. None of the GPL-encumbered codecs are needed and their absence keeps
 //! commercial distribution clean.
 //!
-//! This stage also owns the **upscale to output resolution**. Frames arrive from the
-//! Python sidecar at generation size (768x1024 / 768x1152) and are scaled here to
-//! 1350x1800 / 1200x1800. The scale happens in the same pass as the encode — a separate
-//! resize pass would write a second full set of frames to disk for nothing.
+//! This stage also owns the **scale to output resolution**. Frames arrive from the Python
+//! sidecar at generation size (768x1024 / 768x1152) and are scaled here. The scale happens
+//! in the same pass as the encode; a separate resize pass would write a second full set of
+//! frames to disk for nothing.
 //!
 //! Measured 2026-08-20, 64 frames at 1350x1800: WebP q75 lands at 6.18 MB (5.70 MB with
-//! text protection, since static regions compress better). GIF is 44.41 MB — 7.2x — which
-//! is why it is the compatibility option and warrants a size warning before it runs.
+//! text protection, since static regions compress better). GIF is 44.41 MB, 7.2x, which is
+//! why it is the compatibility option and warrants a size warning before it runs.
+//!
+//! **Two output scales (see `OutScale`).** Full is the SteamGridDB grid size; Half is
+//! exactly half of each axis, added 2026-08-21 because RetroVoid hitches while scrolling a
+//! grid of full-size animated covers. Halving each axis is a *quarter* of the pixels, so it
+//! cuts per-frame decode work about 4x.
 
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
+
+/// Output scale. The aspect ratio is decided by the source cover, never by the user, so
+/// this is the only export-size choice the UI offers.
+///
+/// `Half` exists because a launcher scrolling a grid of these has to decode every frame:
+/// halving each axis quarters the pixel count, which is where the cost actually is. It is
+/// also *closer to native* than `Full` is. Generation is 768x1024 / 768x1152, so `Full`
+/// upscales 1.76x / 1.56x while `Half` downscales to 0.88x / 0.78x. `Half` is discarding
+/// resolution the model never produced, rather than detail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OutScale {
+    /// SteamGridDB grid size. The default, because the target display is a large-format TV
+    /// where covers are viewed near full size (CLAUDE.md §5).
+    #[default]
+    Full,
+    /// Half of each axis. 675x900 and 600x900.
+    Half,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Aspect {
@@ -43,11 +66,19 @@ impl Aspect {
         }
     }
 
-    /// Output size — SteamGridDB-standard grid dimensions.
-    pub fn out_size(self) -> (u32, u32) {
-        match self {
+    /// Output size. `Full` is the SteamGridDB-standard grid dimensions.
+    ///
+    /// Both full sizes are even on both axes, so `Half` divides exactly and there is no
+    /// rounding to reason about. A test pins that, since an odd dimension would have to be
+    /// rounded somewhere and would quietly shift the aspect ratio.
+    pub fn out_size(self, scale: OutScale) -> (u32, u32) {
+        let (w, h) = match self {
             Aspect::ThreeFour => (1350, 1800),
             Aspect::TwoThree => (1200, 1800),
+        };
+        match scale {
+            OutScale::Full => (w, h),
+            OutScale::Half => (w / 2, h / 2),
         }
     }
 }
@@ -92,8 +123,14 @@ async fn run(ffmpeg: &Path, args: &[String]) -> Result<(), EncodeError> {
 /// 2.9x the size for 4.6 dB. It does not need to be a user-facing slider.
 /// Split out so the argument list can be asserted in a test. The `-f webp` in here is
 /// load-bearing and easy to delete as redundant; see the note below.
-fn webp_args(pattern: &Path, out: &Path, aspect: Aspect, quality: u8) -> Vec<String> {
-    let (ow, oh) = aspect.out_size();
+fn webp_args(
+    pattern: &Path,
+    out: &Path,
+    aspect: Aspect,
+    scale: OutScale,
+    quality: u8,
+) -> Vec<String> {
+    let (ow, oh) = aspect.out_size(scale);
     vec![
         "-y".into(), "-hide_banner".into(), "-loglevel".into(), "error".into(),
         "-framerate".into(), FPS.to_string(),
@@ -118,9 +155,10 @@ pub async fn webp(
     pattern: &Path,
     out: &Path,
     aspect: Aspect,
+    scale: OutScale,
     quality: u8,
 ) -> Result<PathBuf, EncodeError> {
-    run(ffmpeg, &webp_args(pattern, out, aspect, quality)).await?;
+    run(ffmpeg, &webp_args(pattern, out, aspect, scale, quality)).await?;
     Ok(out.to_path_buf())
 }
 
@@ -140,8 +178,9 @@ pub async fn gif(
     palette: &Path,
     out: &Path,
     aspect: Aspect,
+    scale: OutScale,
 ) -> Result<PathBuf, EncodeError> {
-    let (ow, oh) = aspect.out_size();
+    let (ow, oh) = aspect.out_size(scale);
     let scale = format!("scale={ow}:{oh}:flags=lanczos");
 
     run(ffmpeg, &[
@@ -193,6 +232,7 @@ mod tests {
             Path::new("frames_%04d.png"),
             Path::new("cover_animated.png"),
             Aspect::ThreeFour,
+            OutScale::Full,
             75,
         );
         let i = args.iter().position(|a| a == "-f").expect("-f must be present");
@@ -202,7 +242,53 @@ mod tests {
 
     #[test]
     fn output_targets_are_steamgriddb_sizes() {
-        assert_eq!(Aspect::ThreeFour.out_size(), (1350, 1800));
-        assert_eq!(Aspect::TwoThree.out_size(), (1200, 1800));
+        assert_eq!(Aspect::ThreeFour.out_size(OutScale::Full), (1350, 1800));
+        assert_eq!(Aspect::TwoThree.out_size(OutScale::Full), (1200, 1800));
+    }
+
+    #[test]
+    fn half_is_the_four_sizes_the_ui_offers() {
+        assert_eq!(Aspect::ThreeFour.out_size(OutScale::Half), (675, 900));
+        assert_eq!(Aspect::TwoThree.out_size(OutScale::Half), (600, 900));
+    }
+
+    /// Integer division would silently shift the aspect ratio if a full size were ever odd
+    /// on either axis, and the drift would be invisible until someone measured a cover.
+    #[test]
+    fn halving_is_exact_so_the_ratio_cannot_drift() {
+        for a in [Aspect::ThreeFour, Aspect::TwoThree] {
+            let (fw, fh) = a.out_size(OutScale::Full);
+            assert_eq!(fw % 2, 0, "full width {fw} is odd, halving would round");
+            assert_eq!(fh % 2, 0, "full height {fh} is odd, halving would round");
+
+            let (hw, hh) = a.out_size(OutScale::Half);
+            assert_eq!(
+                (fw as f64 / fh as f64),
+                (hw as f64 / hh as f64),
+                "half changed the aspect ratio of {a:?}"
+            );
+        }
+    }
+
+    /// Half must reach ffmpeg as the scale filter, not merely exist on the enum. The whole
+    /// point is the pixels RetroVoid has to decode.
+    #[test]
+    fn the_scale_choice_reaches_the_ffmpeg_filter() {
+        for (scale, want) in [
+            (OutScale::Full, "scale=1350:1800:flags=lanczos"),
+            (OutScale::Half, "scale=675:900:flags=lanczos"),
+        ] {
+            let args = webp_args(
+                Path::new("f_%04d.png"),
+                Path::new("out.webp"),
+                Aspect::ThreeFour,
+                scale,
+                75,
+            );
+            assert!(
+                args.iter().any(|a| a == want),
+                "{scale:?} did not produce `{want}`; args were {args:?}"
+            );
+        }
     }
 }

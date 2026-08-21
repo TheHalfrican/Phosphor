@@ -32,7 +32,7 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::RwLock;
 
-use encode::Aspect;
+use encode::{Aspect, OutScale};
 use sidecar::Sidecar;
 
 /// Long-lived app state.
@@ -382,6 +382,7 @@ async fn export(
     out_path: String,
     quality: Option<u8>,
     gif: Option<bool>,
+    half: Option<bool>,
 ) -> CmdResult<String> {
     // 1. Text protection (§5a). Skipped only if the user cleared the mask entirely.
     let mut mask_tmp: Option<PathBuf> = None;
@@ -421,6 +422,9 @@ async fn export(
 
     let (w, h) = image_size(&frames[0])?;
     let aspect = Aspect::classify(w, h);
+    // Half exists for launcher grid scrolling: a quarter of the pixels to decode per frame.
+    // Absent means Full, so an older caller keeps the previous behaviour.
+    let scale = if half.unwrap_or(false) { OutScale::Half } else { OutScale::Full };
 
     let staging = std::env::temp_dir().join(format!("phosphor_pp_{}", uuid::Uuid::new_v4()));
     loop_build::materialise(&frames, &staging).map_err(err)?;
@@ -432,9 +436,9 @@ async fn export(
 
     let result = if gif.unwrap_or(false) {
         let palette = staging.join("palette.png");
-        encode::gif(&ffmpeg, &pattern, &palette, &out, aspect).await.map_err(err)
+        encode::gif(&ffmpeg, &pattern, &palette, &out, aspect, scale).await.map_err(err)
     } else {
-        encode::webp(&ffmpeg, &pattern, &out, aspect, quality.unwrap_or(75))
+        encode::webp(&ffmpeg, &pattern, &out, aspect, scale, quality.unwrap_or(75))
             .await
             .map_err(err)
     };

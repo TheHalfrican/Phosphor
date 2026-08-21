@@ -385,13 +385,53 @@ ffmpeg is invoked from Rust as a bundled sidecar binary. **Use an LGPL build wit
 webp and gif support** — we need none of the GPL-encumbered codecs (no x264, no x265),
 which keeps commercial distribution clean and the binary small.
 
-**The export stage also owns the upscale to the output target** (§5). Frames arrive from
-the sidecar at generation size and must be scaled to 1350×1800 or 1200×1800 here. Do the
-scale in the same ffmpeg pass as the encode — a separate PNG resize pass would write a
-second full set of frames to disk for nothing.
+**The export stage also owns the scale to the output target** (§5). Frames arrive from
+the sidecar at generation size and must be scaled here. Do the scale in the same ffmpeg
+pass as the encode; a separate PNG resize pass would write a second full set of frames to
+disk for nothing.
 
 Use `lanczos`. `bicubic` is visibly softer at these ratios and `neighbor`/`bilinear` are
 not worth considering for artwork.
+
+### Two output scales, added 2026-08-21
+
+The user picks **Full** or **Half**, and the aspect ratio still comes from the source, never
+from the user. So the four sizes are two ratios × two scales:
+
+| | 3:4 | 2:3 |
+|---|---|---|
+| Full | 1350×1800 | 1200×1800 |
+| Half | 675×900 | 600×900 |
+
+**Why.** RetroVoid hitches while scrolling a grid of full-size animated covers. Decoding is
+per-pixel, and halving each axis is a **quarter** of the pixels: 2.43 Mpx → 0.61 Mpx per
+frame at 3:4.
+
+**Half is closer to native than Full is.** Generation is 768×1024 / 768×1152, so Full
+*upscales* 1.76× / 1.56× while Half *downscales* to 0.88× / 0.78×. Half discards resolution
+the model never produced rather than detail. Checked on Halo's title band at equal display
+size: Half is indistinguishable from Full, and the thin "CAMPAIGN EVOLVED" subtitle is
+marginally cleaner.
+
+**The decode saving is 4×; the file-size saving is only about 2×.** These are different
+numbers and it is easy to conflate them. Measured 2026-08-21, 64 frames, WebP q75:
+
+| cover | Full | Half | half as % of full |
+|---|---|---|---|
+| BO3 3:4, protected | 5.97 MB | 2.81 MB | 47% |
+| Halo 2:3 | 3.78 MB | 1.38 MB | 36% |
+| Halo 2:3, protected, in-app | 3.49 MB | 1.24 MB | 36% |
+
+Half does not land at a quarter of the file size, because downscaling raises per-pixel
+entropy and the frame count is unchanged at 64. Do not "correct" the UI's estimates to
+full/4. The spread between covers (36% vs 47%) is content, so treat any single figure as an
+order of magnitude.
+
+GIF halves harder: 40.36 → 11.18 MB on BO3 (28%), 34.24 → 8.52 MB on Halo (25%).
+
+**Full stays the default.** The target display is a large-format TV where covers are viewed
+near full size (§5), so Half is a deliberate trade for grid smoothness, not a better
+default. If a launcher only ever shows these in a grid, that reasoning would flip.
 
 ### Animated WebP (primary)
 
@@ -588,6 +628,7 @@ assumptions are the only real risk in this project.
 | Download to `.part`, rename only after the hash passes | The final path then only ever exists with verified contents, which is what lets startup stay a cheap size check rather than rehashing 7 GB every launch. |
 | Phosphor is free and Apache-2.0; RetroVoid is paid | Free, self-contained tools are the draw into The Halfrican Software's ecosystem, and Phosphor suits that unusually well because its output is *displayed* — every cover made keeps advertising. Apache rather than MIT for its §6: it grants the code and explicitly withholds the trademarks, so a fork cannot present itself as Phosphor. Weights are never redistributed (§3), so repo licensing stays independent of the models'. |
 | Aspect-ratio boxes fit against both axes, via `cqw`/`cqh` | Pinning one axis and clamping the other with `max-*` silently puts the box off-ratio: the clamp does not shrink the definite dimension. It squashed 2:3 covers 33% in the mask editor. Percentages cannot cross axes, so `min(100cqh, 100cqw / var(--ar))` on a size container is the actual fix. |
+| Export offers Full and Half, ratio still automatic | A launcher grid hitches on full-size animated covers, and decode cost is per-pixel: half each axis is a quarter of the pixels. Half is also *closer to native* than Full, which upscales 1.76x from the generation size. Exposing four raw sizes instead of a scale would let a 3:4 size be picked for a 2:3 cover. |
 | `native-tls` for the downloader, not rustls | **reqwest 0.13 renamed its TLS features** — `rustls-tls` no longer exists and `default-tls` now *means* rustls, whose provider is aws-lc-rs (wants cmake + nasm on windows-msvc). `native-tls` is schannel: no crypto toolchain, no vendored roots, and it trusts what Windows already trusts. Do not "fix" this back to the 0.11/0.12 spelling. |
 
 ---
@@ -696,6 +737,13 @@ written to `<appdata>/models/models/…` while dev — rooted at the repo — re
 so it could not have surfaced until packaging. Now `data_root()`, returning the app data dir
 itself. `assets/models.json` was also missing from `tauri.conf.json`'s `resources`, which
 would have made `model_status` fail in a packaged build.
+
+### Export scale, added 2026-08-21
+
+Full or Half, chosen in the export dialog and reflected on the main screen and status bar.
+See §7 for the sizes, the measurements and why Full stays the default. Verified in the app
+on one Halo generation with only the toggle flipped: 1200×1800 / 3.49 MB and 600×900 /
+1.24 MB, both 64 frames.
 
 ### Built but not finished
 
