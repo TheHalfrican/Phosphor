@@ -710,6 +710,28 @@ would have made `model_status` fail in a packaged build.
 - `tools/analyze_run.py`'s `stability` metric **does not generalise across covers** — it
   scored two visibly destroyed covers as "OK". Use it only for A/B within one cover.
 
+### The icon
+
+Design **2a, "Ghost sweep"**, from the same Claude Design canvas as the UI: a portrait card
+holding a bright leading bar with five echo bars decaying behind it, raked -14°. The name
+made literal, since phosphor afterglow is a decay trail rather than a glow.
+
+`tools/make_icon.py` draws it with Pillow rather than rasterising the SVG, so the build
+needs no extra dependency, supersampled 4× because the mark is all diagonal edges.
+
+```powershell
+.venv/Scripts/python.exe tools/make_icon.py            # -> src-tauri/icons/source.png
+npm run tauri icon src-tauri/icons/source.png          # -> the whole set
+```
+
+`tauri icon` also emits `android/` and `ios/` directories. This is a Windows app; delete
+them, they are not referenced by `bundle.icon`.
+
+The faint bars fall away first when the icon is scaled down, leaving the bright head and the
+card silhouette, which is roughly what the canvas' own 32px and 16px variants do by hand. So
+one master survives the downscale rather than needing per-size art. Checked against Nocturne,
+Windows dark, Windows light and white grounds.
+
 ### The UI source
 
 The interface was designed on a Claude Design canvas and ported here rather than authored ad
