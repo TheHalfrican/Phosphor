@@ -1,26 +1,32 @@
 # Phosphor
 
 **Drop in a static game cover, get a seamlessly looping animated one out.** Runs entirely
-on your own GPU — nothing is uploaded, and there is no account or API key anywhere in it.
+on your own GPU. Nothing is uploaded, and there is no account or API key anywhere in it.
 
 The name refers to CRT phosphor afterglow: the decay trail that makes an old display feel
-alive rather than merely lit. That is the register the whole tool aims for — a cover that
-breathes, not a cover that performs.
+alive rather than merely lit. That is the register the whole tool aims for, a cover that
+breathes rather than a cover that performs.
 
-Built for someone curating a game library in a launcher (Steam, Playnite, LaunchBox, ES-DE)
-who has a 3:4 box scan and wants their grid to feel alive, without first learning what a
-sampler is.
+Built for someone curating a game library in a launcher (Steam, RetroVoid, Playnite,
+LaunchBox, ES-DE) who has a 3:4 or 2:3 box scan and wants their grid to feel alive, without
+first learning what a sampler is.
 
 ---
 
 ## What it does
 
-1. You drop in a cover.
-2. You pick one of eight motion presets — slow drift, neon flicker, water ripple, fog roll,
+1. You drop in a cover, either 3:4 or 2:3.
+2. You pick one of eight motion presets: slow drift, neon flicker, water ripple, fog roll,
    ember glow, cloth sway, starfield shimmer, rain sheen.
 3. It generates ~1.4 seconds of subtle motion, ping-pongs it into a seamless loop, and
-   exports an animated WebP at SteamGridDB grid dimensions (1350×1800, or 1200×1800 for
-   2:3 sources). GIF is available as a compatibility export.
+   exports an animated WebP at SteamGridDB grid dimensions. **3:4 sources come out at
+   1350×1800, 2:3 sources at 1200×1800.** GIF is available as a compatibility export.
+
+Both ratios are generated below their output size (768×1024 and 768×1152 respectively) and
+Lanczos-upscaled on export. Generation dimensions have to be divisible by 32, which none of
+1350, 1200 or 1800 are, so a resize is mandatory rather than a shortcut. Those two sizes
+also sit just inside the model's trained pixel budget, where it is least prone to
+duplicating content.
 
 On an RTX 4090 a cover takes about **63 seconds** and peaks around **8.5 GB of VRAM**.
 
@@ -48,15 +54,15 @@ thing without making you learn a diffusion pipeline.
 Three decisions are worth calling out, because they are what keep this a ~12 GB install
 instead of a ~25 GB one:
 
-**No text encoder.** Wan's UMT5-XXL encoder is ~6.7 GB — as large as the quantised model —
-and exists only to turn prompt strings into tensors. Since every preset prompt is known at
-build time, they are encoded once on a developer machine and shipped as a 3.6 MB
+**No text encoder.** Wan's UMT5-XXL encoder is ~6.7 GB, as large as the quantised model
+itself, and exists only to turn prompt strings into tensors. Since every preset prompt is
+known at build time, they are encoded once on a developer machine and shipped as a 3.6 MB
 `embeddings.safetensors`. The encoder is never instantiated at runtime. This is also why
 there is no custom-prompt field: it genuinely cannot work without the encoder, and a
 disabled-looking input is worse than none.
 
 **Text is composited, not generated.** The model cannot preserve fine glyph structure
-through encode → denoise → decode. "CREED" comes out as "NMEAV" — identically at every
+through encode → denoise → decode. "CREED" comes out as "NMEAV", identically at every
 guidance value, including 1.0 where classifier-free guidance is fully off, so no amount of
 tuning fixes it. Instead [CRAFT](https://github.com/clovaai/CRAFT-pytorch) detects the type
 and the original pixels are composited back over every frame with a feathered mask. The
@@ -64,7 +70,7 @@ loop stays seamless and the file actually gets *smaller*, because static regions
 well across frames. Detection failures are silent, so the mask is user-editable.
 
 **Loops are ping-pong.** Frames run forward then backward with both endpoints dropped
-(`2N-2`), which means presets must be non-causal — drift, ripple, glow, sway. Anything with
+(`2N-2`), which means presets must be non-causal: drift, ripple, glow, sway. Anything with
 a direction (rain, rising smoke, falling leaves) reads as an obvious rewind and is out of
 scope for v1.
 
@@ -76,7 +82,7 @@ Design notes, measurements and the reasoning behind each choice live in
 
 ## Requirements
 
-- **Windows** with an NVIDIA GPU — 10 GB+ VRAM recommended (measured 8.5 GB peak)
+- **Windows** with an NVIDIA GPU, 10 GB+ VRAM recommended (measured 8.5 GB peak)
 - Python 3.11+ and Rust, for building from source
 - **~7.1 GB** of model weights, downloaded on first run and checksum-verified
 
@@ -96,8 +102,9 @@ in `tools/` include the UMT5 encoder used to bake embeddings.
 
 ## Status
 
-The pipeline is proven end to end — cover in, seamless 1350×1800 animated WebP out — and
-the first-run model downloader is resumable, checksum-verified and cancellable.
+The pipeline is proven end to end, cover in and seamless animated WebP out, measured at
+1350×1800 on a 3:4 cover. The first-run model downloader is resumable, checksum-verified
+and cancellable.
 
 **Not yet packaged.** The Python sidecar still needs to be frozen with PyInstaller before
 there is an installer to hand anyone. Building from source works today.
@@ -106,15 +113,15 @@ there is an installer to hand anyone. Building from source works today.
 
 ## Third-party components
 
-- [Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) — Apache-2.0, downloaded
+- [Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B): Apache-2.0, downloaded
   at runtime ([Q6_K GGUF](https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF))
-- [CRAFT](https://github.com/clovaai/CRAFT-pytorch) — MIT. The model definition is vendored
+- [CRAFT](https://github.com/clovaai/CRAFT-pytorch): MIT. The model definition is vendored
   in `sidecar/vendor/craft/` (patched for modern torchvision, which removed `model_urls`);
   its licence is included there.
-- ffmpeg — an LGPL build with only webp and gif enabled, deliberately no GPL codecs.
+- ffmpeg: an LGPL build with only webp and gif enabled, deliberately no GPL codecs.
 
 ## Licence
 
-Not yet licensed — all rights reserved. Phosphor is intended for commercial release under
+Not yet licensed, so all rights reserved. Phosphor is intended for commercial release under
 **The Halfrican Software**, so the source is published here to be read rather than reused.
 If you want to do something with it, open an issue and ask.
