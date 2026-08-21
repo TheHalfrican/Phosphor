@@ -764,16 +764,25 @@ which renders `<x-dc>` documents), not application code. Do not port them.
 
 ### Before this is ready to share
 
-Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. Two things are still
-missing before it is worth pointing anyone at:
+Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. **0.2.0** builds a
+40 MB installer that installs, downloads its runtime, generates, protects text and exports.
 
-- **An installer.** Until the sidecar is frozen, running Phosphor needs Rust, Python and a
-  ~19 GB dev setup, which makes it a developer artifact rather than something a person can
-  simply use. This is the next task.
+Still missing before it is worth pointing anyone at:
+
 - **Screenshots in the README.** They belong near the top, under the opening paragraphs and
   above "What it does". A tool whose whole value is visual currently shows none of it.
+- **A wide-window composition.** The screens are fluid and fill a tall window, but a
+  fullscreen window is still a centred column. Making it landscape needs a wrapper element
+  around the non-artwork controls, so it is a composition change rather than CSS and belongs
+  on the design canvas.
+- **A 2:3 cover generated end to end.** Both ratios are wired and unit-tested, but every
+  real generation so far has been 3:4. Halo is the test case.
 
-### Next step — the sidecar cannot ship inside the installer
+**The sidecar release tag is independent of the app version.** `assets/models.json` points
+at the `v0.1.0` release because that is where the archives live and the frozen sidecar has
+not changed since. Only re-upload and re-tag when `sidecar/` actually changes.
+
+### How the sidecar reaches the user — settled, do not re-litigate
 
 **Measured 2026-08-20, not predicted.** `npm run tauri build` compiles and links the app
 fine, then dies in the bundler:
