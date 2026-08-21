@@ -19,14 +19,25 @@ first learning what a sampler is.
 2. You pick one of eight motion presets: slow drift, neon flicker, water ripple, fog roll,
    ember glow, cloth sway, starfield shimmer, rain sheen.
 3. It generates ~1.4 seconds of subtle motion, ping-pongs it into a seamless loop, and
-   exports an animated WebP at SteamGridDB grid dimensions. **3:4 sources come out at
-   1350×1800, 2:3 sources at 1200×1800.** GIF is available as a compatibility export.
+   exports an animated WebP. GIF is available as a compatibility export.
 
-Both ratios are generated below their output size (768×1024 and 768×1152 respectively) and
-Lanczos-upscaled on export. Generation dimensions have to be divisible by 32, which none of
-1350, 1200 or 1800 are, so a resize is mandatory rather than a shortcut. Those two sizes
-also sit just inside the model's trained pixel budget, where it is least prone to
-duplicating content.
+Export offers two sizes, and the aspect ratio always comes from your cover rather than from
+a menu:
+
+| | 3:4 | 2:3 |
+|---|---|---|
+| **Half** (default) | 675×900 | 600×900 |
+| Full | 1350×1800 | 1200×1800 |
+
+Full is the SteamGridDB grid size. Half is the default because a launcher scrolling a grid
+of animated covers has to decode every frame, and halving each axis is a quarter of the
+pixels. It also costs no visible quality at grid size: generation happens at 768×1024 and
+768×1152, so Full is a 1.6x to 1.8x upscale while Half is a slight downscale.
+
+Generation dimensions have to be divisible by 32, which none of 1350, 1200, 675, 600 or 1800
+are, so a resize on export is mandatory rather than a shortcut. Those generation sizes also
+sit just inside the model's trained pixel budget, where it is least prone to duplicating
+content.
 
 On an RTX 4090 a cover takes about **63 seconds** and peaks around **8.5 GB of VRAM**.
 

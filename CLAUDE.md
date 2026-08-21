@@ -976,14 +976,19 @@ which renders `<x-dc>` documents), not application code. Do not port them.
 
 ### Before this is ready to share
 
-Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. **0.2.0** builds both
-installers, which install, download the runtime on first run, generate, protect text and
-export:
+Public at <https://github.com/TheHalfrican/Phosphor> under Apache-2.0. Both installers
+build, install, download the runtime on first run, generate, protect text and export:
 
-| target | size | |
+| target | 0.2.0 size | |
 |---|---|---|
-| `Phosphor_0.2.0_x64-setup.exe` (NSIS) | 41.0 MB | per-user, no elevation |
-| `Phosphor_0.2.0_x64_en-US.msi` (WiX) | 53.4 MB | per-machine, wants admin, deployable by policy |
+| `Phosphor_<ver>_x64-setup.exe` (NSIS) | 41.0 MB | per-user, no elevation |
+| `Phosphor_<ver>_x64_en-US.msi` (WiX) | 53.4 MB | per-machine, wants admin, deployable by policy |
+
+**0.3.0 (2026-08-21)** is the current version. Over 0.2.0: the mask editor no longer squashes
+a 2:3 cover (§12 open bugs), export offers Full or Half with **Half as the default** (§7),
+a landscape window puts the controls beside the artwork (§7a), and the icon's decay ramp is
+lifted so its echoes are visible (§12 "The icon"). The Start Menu pin bug from 0.2.0 turned
+out not to be a defect.
 
 MSI is only viable because the sidecar left the bundle. It packs payload into CAB, which has
 the same 2 GB ceiling that killed NSIS at 2.88 GB, so it would have failed identically had
@@ -992,7 +997,10 @@ the freeze still been bundled.
 Still missing before it is worth pointing anyone at:
 
 - **Screenshots in the README.** They belong near the top, under the opening paragraphs and
-  above "What it does". A tool whose whole value is visual currently shows none of it.
+  above "What it does". A tool whose whole value is visual currently shows none of it. The
+  landscape layout (§7a) is now the better thing to photograph.
+- **The canvas is behind the code** on two things: it has no wide-window artboard, and its
+  2a icon still carries the original decay ramp. Neither blocks a release.
 - ~~**A wide-window composition.**~~ **Done 2026-08-21**, see §7a. The wrapper element this
   entry predicted is `.ph-controls`. It was prototyped directly in the app rather than on the
   canvas, since the canvas has no artboard wider than 460px to extend.
