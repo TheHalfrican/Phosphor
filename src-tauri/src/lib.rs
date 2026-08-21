@@ -87,10 +87,12 @@ fn bundled_binary(app: &AppHandle, stem: &str) -> CmdResult<PathBuf> {
     if let Ok(res) = app.path().resource_dir() {
         candidates.push(res.join(&name));
         candidates.push(res.join("binaries").join(&name));
-        // The frozen sidecar is a PyInstaller *directory* build, not a single file, so it
-        // ships as a resource folder rather than an externalBin. See the spec header in
-        // sidecar/phosphor-sidecar.spec for why onefile is not an option here.
-        candidates.push(res.join("sidecar").join(&name));
+    }
+    // The frozen sidecar is not shipped at all: at 2.88 GB it exceeds what NSIS (and WiX)
+    // can package, so it is downloaded and unpacked into app data on first run, next to
+    // the models. See models.rs and CLAUDE.md 12.
+    if let Ok(data) = models::data_root(app) {
+        candidates.push(data.join("sidecar").join(&name));
     }
 
     candidates

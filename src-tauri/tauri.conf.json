@@ -59,8 +59,7 @@
     "resources": {
       "../assets/presets.json": "assets/presets.json",
       "../assets/models.json": "assets/models.json",
-      "../assets/embeddings.safetensors": "assets/embeddings.safetensors",
-      "../sidecar-dist/phosphor-sidecar/": "sidecar/"
+      "../assets/embeddings.safetensors": "assets/embeddings.safetensors"
     }
   }
 }

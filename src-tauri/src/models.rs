@@ -30,6 +30,11 @@ pub struct ModelFile {
     pub url: String,
     pub bytes: u64,
     pub sha256: String,
+    /// When set, `path` is a zip archive: extract it into this directory (relative to the
+    /// root) once the checksum passes, then delete the archive. Used for the frozen
+    /// sidecar, which is 2.88 GB and cannot ship inside a Windows installer.
+    #[serde(default)]
+    pub unpack_to: Option<String>,
     #[serde(default)]
     pub note: String,
 }
@@ -81,6 +86,27 @@ pub enum ModelError {
     Short { key: String, got: u64, want: u64 },
 }
 
+/// Records the sha256 an unpacked archive was verified against.
+///
+/// An unpacked entry has no single file to size-check, and the archive is deleted after
+/// extraction rather than kept as 1.2 GB of dead weight, so completeness is tracked by a
+/// marker written only after a successful verify-and-extract. Storing the hash rather than
+/// a bare flag means a manifest bump invalidates the old install for free.
+fn marker_path(root: &Path, f: &ModelFile) -> Option<PathBuf> {
+    f.unpack_to
+        .as_ref()
+        .map(|d| root.join(d).join(format!(".phosphor-{}.sha256", f.key)))
+}
+
+fn unpacked_ok(root: &Path, f: &ModelFile) -> bool {
+    match marker_path(root, f) {
+        Some(m) => std::fs::read_to_string(m)
+            .map(|s| s.trim().eq_ignore_ascii_case(&f.sha256))
+            .unwrap_or(false),
+        None => false,
+    }
+}
+
 impl Manifest {
     pub fn load(path: &Path) -> Result<Self, ModelError> {
         let raw = std::fs::read_to_string(path)?;
@@ -100,8 +126,14 @@ impl Manifest {
             let p = root.join(&f.path);
             let meta = std::fs::metadata(&p).ok();
             let actual = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-            let present = meta.is_some() && actual == f.bytes;
-            let incomplete = meta.is_some() && actual != f.bytes;
+            // An unpacked entry is judged by its marker, not by the archive, which is
+            // deleted once extracted.
+            let present = if f.unpack_to.is_some() {
+                unpacked_ok(root, f)
+            } else {
+                meta.is_some() && actual == f.bytes
+            };
+            let incomplete = f.unpack_to.is_none() && meta.is_some() && actual != f.bytes;
             if !present {
                 missing_bytes += f.bytes.saturating_sub(if incomplete { actual } else { 0 });
             }
@@ -359,6 +391,9 @@ pub async fn download_all(
         .files
         .iter()
         .filter(|f| {
+            if f.unpack_to.is_some() {
+                return !unpacked_ok(root, f);
+            }
             let p = root.join(&f.path);
             std::fs::metadata(&p).map(|m| m.len()).ok() != Some(f.bytes)
         })
@@ -502,9 +537,124 @@ async fn fetch_one(
         });
     }
 
+    // ---- publish ----------------------------------------------------------------------
+    if let Some(dir) = &f.unpack_to {
+        let dest_dir = root.join(dir);
+        let sink = rep.sink.clone();
+        let stop = cancel.clone();
+        let (key, sha) = (f.key.clone(), f.sha256.clone());
+        let (count, total, completed) = (rep.count, rep.total, rep.completed);
+        let archive = part.clone();
+        let target = dest_dir.clone();
+
+        // Extraction is blocking I/O over gigabytes; it does not belong on a tokio worker.
+        let done = tokio::task::spawn_blocking(move || {
+            unpack_zip(&archive, &target, &stop, |read, of| {
+                sink(DownloadProgress {
+                    key: key.clone(),
+                    index,
+                    count,
+                    stage: "unpack",
+                    file_received: bytes,
+                    file_bytes: bytes,
+                    received: completed + bytes,
+                    total,
+                    bytes_per_sec: 0,
+                    verify_frac: if of > 0 { read as f64 / of as f64 } else { 1.0 },
+                });
+            })
+        })
+        .await
+        .map_err(|e| ModelError::Manifest(format!("unpack task panicked: {e}")))??;
+
+        if !done {
+            return Ok(false); // cancelled mid-extract
+        }
+
+        // Marker last, so an interrupted extraction is simply not complete and the next
+        // run redoes it rather than trusting a half-populated directory.
+        std::fs::write(
+            marker_path(root, f).expect("unpack_to is Some"),
+            format!("{sha}\n"),
+        )?;
+        // The archive has served its purpose; keeping it would cost another 1.2 GB
+        // permanently.
+        let _ = std::fs::remove_file(&part);
+        return Ok(true);
+    }
+
     // Windows will not rename onto an existing file.
     let _ = std::fs::remove_file(&dest);
     std::fs::rename(&part, &dest)?;
+    Ok(true)
+}
+
+/// Extract `archive` into `dest`. `Ok(false)` means cancelled.
+///
+/// Rejects entries whose path escapes `dest` (zip-slip). `ZipFile::enclosed_name` returns
+/// `None` for absolute paths and for anything containing `..`, which is exactly the check
+/// wanted here — a malicious or corrupt archive must not be able to write outside the
+/// directory we chose.
+fn unpack_zip(
+    archive: &Path,
+    dest: &Path,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(u64, u64),
+) -> Result<bool, ModelError> {
+    use std::io::Read;
+
+    let file = std::fs::File::open(archive)?;
+    let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file))
+        .map_err(|e| ModelError::Manifest(format!("not a readable zip: {e}")))?;
+
+    let total: u64 = (0..zip.len())
+        .filter_map(|i| zip.by_index_raw(i).ok().map(|e| e.size()))
+        .sum();
+    let mut written = 0u64;
+    let mut buf = vec![0u8; 1 << 20];
+
+    std::fs::create_dir_all(dest)?;
+
+    for i in 0..zip.len() {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(false);
+        }
+        let mut entry = zip
+            .by_index(i)
+            .map_err(|e| ModelError::Manifest(format!("corrupt zip entry {i}: {e}")))?;
+
+        let Some(rel) = entry.enclosed_name() else {
+            return Err(ModelError::Manifest(format!(
+                "zip entry {i} has an unsafe path and was refused",
+                )));
+        };
+        let out = dest.join(rel);
+
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out)?;
+            continue;
+        }
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let mut w = std::io::BufWriter::new(std::fs::File::create(&out)?);
+        loop {
+            if cancel.load(Ordering::Relaxed) {
+                return Ok(false);
+            }
+            let n = entry.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            std::io::Write::write_all(&mut w, &buf[..n])?;
+            written += n as u64;
+            on_progress(written, total);
+        }
+        std::io::Write::flush(&mut w)?;
+    }
+
+    on_progress(total, total);
     Ok(true)
 }
 
@@ -618,8 +768,25 @@ mod tests {
             url: "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers/resolve/main/model_index.json".into(),
             bytes: 499,
             sha256: "6a72faeb564b0e894aea8fc4ef27241106eb739e8584e869b61589a65473add7".into(),
+            unpack_to: None,
             note: String::new(),
         }
+    }
+
+    /// Build a small zip in memory so the unpack tests need no fixture on disk.
+    fn make_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut w = zip::ZipWriter::new(&mut buf);
+            let opts: zip::write::FileOptions<()> = zip::write::FileOptions::default();
+            for (name, body) in entries {
+                w.start_file(*name, opts).unwrap();
+                w.write_all(body).unwrap();
+            }
+            w.finish().unwrap();
+        }
+        buf.into_inner()
     }
 
     fn manifest_of(files: Vec<ModelFile>) -> Manifest {
@@ -761,6 +928,82 @@ mod tests {
         assert!(out.status.complete);
         assert_eq!(std::fs::read(&dest).unwrap(), vec![b'z'; f.bytes as usize]);
         assert!(seen.lock().unwrap().is_empty(), "nothing to download, nothing to report");
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn unpack_extracts_nested_paths() {
+        let root = tmp_root("unpack");
+        let archive = root.join("payload.zip");
+        std::fs::write(
+            &archive,
+            make_zip(&[
+                ("phosphor-sidecar.exe", b"MZ fake exe"),
+                ("_internal/torch/lib/torch_cuda.dll", b"fake dll"),
+            ]),
+        )
+        .unwrap();
+
+        let dest = root.join("sidecar");
+        let ok = unpack_zip(&archive, &dest, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        assert!(ok);
+        assert_eq!(std::fs::read(dest.join("phosphor-sidecar.exe")).unwrap(), b"MZ fake exe");
+        // Nested directories must be created, not silently skipped: the freeze is almost
+        // entirely _internal/.
+        assert_eq!(
+            std::fs::read(dest.join("_internal/torch/lib/torch_cuda.dll")).unwrap(),
+            b"fake dll"
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn unpack_refuses_paths_that_escape_the_destination() {
+        // Zip-slip. A crafted archive must not be able to write outside the directory we
+        // chose, and this is worth pinning because the sidecar archive is fetched over the
+        // network and extracted into the user's app data.
+        let root = tmp_root("zipslip");
+        let archive = root.join("evil.zip");
+        std::fs::write(&archive, make_zip(&[("../../escaped.txt", b"pwned")])).unwrap();
+
+        let dest = root.join("sidecar");
+        let err = unpack_zip(&archive, &dest, &AtomicBool::new(false), |_, _| {})
+            .expect_err("an escaping entry must be refused");
+        assert!(format!("{err}").contains("unsafe path"), "got: {err}");
+        assert!(!root.join("escaped.txt").exists());
+        assert!(!root.parent().unwrap().join("escaped.txt").exists());
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_unpacked_entry_is_judged_by_its_marker_not_the_archive() {
+        let root = tmp_root("marker");
+        let mut f = small_file();
+        f.key = "sidecar".into();
+        f.path = "sidecar/phosphor-sidecar.zip".into();
+        f.unpack_to = Some("sidecar".into());
+
+        let m = manifest_of(vec![f.clone()]);
+
+        // No marker: not installed, even though nothing is obviously missing.
+        assert!(!m.status(&root).complete);
+
+        // Marker with the wrong hash: a manifest bump must invalidate the old install.
+        let marker = root.join("sidecar").join(".phosphor-sidecar.sha256");
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, "0000000000000000000000000000000000000000000000000000000000000000\n").unwrap();
+        assert!(!m.status(&root).complete);
+
+        // Marker matching the manifest: installed, and the archive is long gone.
+        std::fs::write(&marker, format!("{}\n", f.sha256)).unwrap();
+        let st = m.status(&root);
+        assert!(st.complete);
+        assert!(st.files[0].present);
+        assert!(!root.join(&f.path).exists());
 
         std::fs::remove_dir_all(&root).ok();
     }

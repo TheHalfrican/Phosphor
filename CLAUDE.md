@@ -762,6 +762,47 @@ manifest. The sidecar becomes another entry: zip `sidecar-dist/phosphor-sidecar/
 add its SHA256. The installer drops to ~20 MB and first-run goes from 7.11 GB to ~10 GB.
 
 This is what §3 already says to do about big things, so it is a return to the design rather
-than a departure from it. It needs one new capability the downloader does not have yet:
-**unpacking an archive after verifying it.**
+than a departure from it.
+
+**Built 2026-08-20.** `models.rs` now unpacks archive entries, and the installer builds:
+
+| | |
+|---|---|
+| Installer (NSIS) | **40 MB** — builds cleanly with the sidecar out of the bundle |
+| Sidecar archive | **2.06 GB** zipped from 3.09 GB (67%), `tools/package_sidecar.py` |
+| First-run download | **9.17 GB** total (was 7.11 GB) |
+
+A manifest entry with `unpack_to` is extracted after its checksum passes, the archive is
+then deleted, and completeness is tracked by a marker file holding the verified sha256 —
+storing the hash rather than a bare flag means a manifest bump invalidates an old install
+for free. Extraction refuses any entry whose path escapes the destination (zip-slip); that
+is a test, not a comment, because this archive arrives over the network and is unpacked
+into the user's app data.
+
+The frozen sidecar therefore lives at `<appdata>/sidecar/phosphor-sidecar.exe`, not in the
+install directory, and `bundled_binary()` looks there.
+
+### The one thing left: host the archive
+
+`assets/models.json` points the `sidecar` entry at
+
+```
+https://huggingface.co/TheHalfrican/phosphor-sidecar/resolve/main/phosphor-sidecar.zip
+```
+
+**which does not exist yet.** Until that archive is uploaded, first run downloads the models
+fine and then fails on the sidecar with a legible 404. Build and publish it with:
+
+```powershell
+./tools/build_sidecar.ps1                      # -> sidecar-dist/phosphor-sidecar/
+.venv/Scripts/python.exe tools/package_sidecar.py   # -> the .zip, size and sha256
+```
+
+Hugging Face rather than GitHub Releases, deliberately: at 2.06 GB the archive is only just
+under GitHub's 2 GiB per-asset cap, and one torch update would push it over. HF has no
+practical limit, and the downloader already fetches everything else from there.
+
+**Re-run `package_sidecar.py` and update the sha256 in `models.json` after any sidecar
+rebuild.** The freeze is not bit-reproducible, so the hash changes even when the code does
+not.
 

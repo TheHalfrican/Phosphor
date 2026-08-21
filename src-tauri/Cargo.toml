@@ -41,6 +41,11 @@ sha2 = "0.10"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream", "http2", "system-proxy"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
+# Unpacking the frozen sidecar archive after its checksum is verified (§3). deflate only:
+# the payload is CUDA DLLs, which barely compress, so zstd/bzip2 support would add build
+# complexity for nothing.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 [profile.release]
 # The GPU work happens in the Python sidecar, so the Rust side optimises for a small
 # binary rather than for speed.

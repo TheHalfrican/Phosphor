@@ -1,6 +1,6 @@
 {
-  "_comment": "First-run download manifest (CLAUDE.md \u00a73). Weights are NOT shipped in the installer: keeps it small and keeps Apache-2.0 model licensing separate from app distribution. SHA256 computed from verified-working local copies on 2026-08-20.",
-  "total_bytes": 7113617333,
+  "_comment": "First-run download manifest (CLAUDE.md \u00a73). Weights are NOT shipped in the installer: keeps it small and keeps Apache-2.0 model licensing separate from app distribution. SHA256 computed from verified-working local copies on 2026-08-20. The sidecar entry is an archive: it is unpacked into app data after its checksum passes, and tracked by a marker file rather than by the archive, which is deleted afterwards.",
+  "total_bytes": 9173605950,
   "files": [
     {
       "key": "transformer",
@@ -53,6 +53,15 @@
       "bytes": 83152330,
       "sha256": "4a5efbfb48b4081100544e75e1e2b57f8de3d84f213004b14b85fd4b3748db17",
       "note": "CRAFT scene-text detector (MIT). Used for the text-protection mask."
+    },
+    {
+      "key": "sidecar",
+      "path": "sidecar/phosphor-sidecar.zip",
+      "url": "https://huggingface.co/TheHalfrican/phosphor-sidecar/resolve/main/phosphor-sidecar.zip",
+      "bytes": 2059988617,
+      "sha256": "d309f53877865e4d385b5a7d388fbcba97b78ab0d9b4a54829d5a98c5331e8d4",
+      "unpack_to": "sidecar",
+      "note": "Frozen Python inference sidecar (torch + CUDA). 2.88 GB unpacked, which no Windows installer format can carry - NSIS fails at the 1.96 GB signed-32-bit boundary and WiX packs into CAB with the same ceiling. Downloaded and unpacked on first run instead. NOT YET UPLOADED: the url above is the intended location; publish the archive from tools/package_sidecar.py there."
     }
   ]
 }

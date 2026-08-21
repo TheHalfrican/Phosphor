@@ -40,7 +40,9 @@ type ModelStatus = { complete: boolean; missing_bytes: number; files: ModelFile[
    so neither bar ever rewinds. */
 type DlProgress = {
   key: string; index: number; count: number;
-  stage: "download" | "verify";
+  /* "unpack" only occurs for archive entries (the frozen sidecar). Like "verify" it
+     reports through verify_frac, and the byte counters stay pinned so nothing rewinds. */
+  stage: "download" | "verify" | "unpack";
   file_received: number; file_bytes: number;
   received: number; total: number;
   bytes_per_sec: number; verify_frac: number;
@@ -374,7 +376,9 @@ export default function App() {
                   : live
                     ? live.stage === "verify"
                       ? `verifying · ${Math.round(live.verify_frac * 100)}%`
-                      : `${Math.round(pct * 100)}%`
+                      : live.stage === "unpack"
+                        ? `unpacking · ${Math.round(live.verify_frac * 100)}%`
+                        : `${Math.round(pct * 100)}%`
                     : f.partial > 0
                       ? `${Math.round(pct * 100)}% · resumable`
                       : downloading
@@ -393,7 +397,7 @@ export default function App() {
                     </div>
                     <div className="ph-track">
                       <div
-                        className={`ph-fill${live && live.stage === "verify" ? " verifying" : ""}`}
+                        className={`ph-fill${live && live.stage !== "download" ? " verifying" : ""}`}
                         style={{ width: `${Math.min(100, pct * 100)}%` }}
                       />
                     </div>
@@ -422,7 +426,9 @@ export default function App() {
                     ? `${rate(dl.bytes_per_sec)} · ${eta(remaining / dl.bytes_per_sec)}`
                     : dl?.stage === "verify"
                       ? "Checking the file against its checksum"
-                      : "Connecting to Hugging Face"}
+                      : dl?.stage === "unpack"
+                        ? "Unpacking — this one is large and takes a minute"
+                        : "Connecting to Hugging Face"}
                 </div>
               </div>
             )}
