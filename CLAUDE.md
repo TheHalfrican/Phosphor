@@ -701,6 +701,43 @@ would have made `model_status` fail in a packaged build.
 - **Inter font** is not bundled (see §7a).
 - **ffmpeg is 111 MB**, not §7's ~80 MB estimate. A webp+gif-only build would be far smaller.
 
+### Open bugs — found installing 0.2.0, 2026-08-21
+
+Three things seen in the installed app, none of them blocking export.
+
+**1. A 2:3 cover is squashed horizontally in the mask editor.** Halo only; 3:4 covers are
+fine, and the export itself is correct, so this is preview-only.
+
+Almost certainly the fix for the grey band, seen from the other side.
+`.ph-maskcanvas img` is `object-fit: fill`, which was chosen so the image always covers the
+box and stays co-registered with the mask canvas overlaid on the same rect. But the box
+itself can go off-aspect: it takes `height: 100%` from the stage and derives width from
+`aspect-ratio`, and when `max-width: 100%` clamps that width the definite height does not
+shrink to match. Previously that surfaced as a grey band; now `fill` stretches the artwork
+into it instead. A 2:3 box is taller and narrower, so it clamps sooner and distorts more.
+
+The real fix is to stop the box going off-aspect rather than to paper over it: size it so it
+fits *both* axes, rather than pinning one and clamping the other. Do not simply revert to
+`object-fit: contain`, which brings the grey band back, or `cover`, which would crop the
+mask out of alignment with the artwork.
+
+**2. The icon does not show on a Start Menu pin.** Taskbar and the exe are correct now, so
+this is a third icon path, distinct from the two already fixed (window icon via
+`entries()[0]`, and exe resource). Start pins take their icon from the shortcut's
+`IconResource`, and Windows caches Start tiles aggressively and separately from the taskbar.
+Worth checking, in order: what the NSIS/MSI shortcut actually points at, whether it names an
+icon explicitly, and whether it survives clearing the Start tile cache. The `Square*Logo.png`
+assets are MSIX/Store tiles and are almost certainly *not* what a classic Start pin reads.
+
+**3. First-run setup errored on Download, then worked after a restart.** Error text was not
+captured, so this needs reproducing before it can be diagnosed. The installed app writes no
+log, which is itself part of the problem — `sidecar://log` and errors only go to the UI.
+
+Suspects worth eliminating first: `model_status` was read at boot and the Download click acts
+on that snapshot, the `downloading` guard in `download_models`, and a partially-populated app
+data directory left by the previous install. When reproducing, capture the exact banner text;
+without it this is guesswork.
+
 ### Known limitations, not bugs
 
 - **Small text is destroyed and cannot be recovered by tuning** (§5a). Protection via CRAFT
