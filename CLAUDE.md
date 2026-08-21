@@ -634,6 +634,35 @@ tools/sweep.py                 cover x preset sweep
 tools/analyze_run.py           metrics — READ ITS HEADER, it is broken cross-cover
 ```
 
+### Sidecar freeze — done 2026-08-20
+
+`sidecar/phosphor-sidecar.spec` freezes the sidecar with PyInstaller. Verified against the
+real JSONL protocol, not by importing it in-process: ping, generate, detect_text, protect,
+clean shutdown.
+
+**Parity is exact where it matters.** `detect_text` on BO3 returned **14.4 %** coverage,
+matching §5a's recorded figure for that cover. A full 33-frame / 20-step run took **58.5 s
+warm** (vs §5's 63.3 s baseline) with an 8.5 s model load, so freezing costs nothing.
+
+**Onedir, not onefile — and therefore not an `externalBin`.** The payload is ~2.9 GB of
+torch and CUDA. Onefile would re-extract all of it to temp on every launch; onedir starts in
+**1.2 s**. Tauri's `externalBin` takes single files only, so the sidecar ships as a bundle
+*resource* (`"../dist/phosphor-sidecar/": "sidecar/"`) and `bundled_binary()` resolves it.
+Only ffmpeg remains an `externalBin`.
+
+**Two roots, not one.** `inference_server.py` used to derive `ROOT` from `__file__`, which
+frozen points into PyInstaller's temp extraction dir. It now takes `--models` and `--assets`,
+which are genuinely different places once installed: models live in app data (7 GB, must
+survive an update), embeddings ship in the resource dir. Running from source with no
+arguments still resolves the repo layout, so dev is unchanged.
+
+**The failure worth remembering:** the first build died at runtime with
+`PackageNotFoundError: No package metadata was found for ... 'requests'`. diffusers and
+transformers call `importlib.metadata.version()` on packages they merely *probe* for, so the
+set is not knowable from our own imports. The spec now copies `.dist-info` for **every**
+installed distribution — a few hundred KB against 2.9 GB, and the whole class of error
+disappears. Do not replace that with a hand-picked list.
+
 ### Model downloader — done 2026-08-20
 
 Runtime download is **7.11 GB** (vs 21 GB dev; the gap is §4's text-encoder trick), driven
@@ -668,9 +697,6 @@ would have made `model_status` fail in a packaged build.
 
 ### Built but not finished
 
-- **Sidecar freeze.** `sidecar/inference_server.py` works; it is not yet a PyInstaller
-  binary, so `externalBin` in `tauri.conf.json` lists only ffmpeg. See
-  `src-tauri/binaries/README.md` — a missing entry there fails *every* build including dev.
 - **Inter font** is not bundled (see §7a).
 - **ffmpeg is 111 MB**, not §7's ~80 MB estimate. A webp+gif-only build would be far smaller.
 
@@ -705,14 +731,20 @@ missing before it is worth pointing anyone at:
 - **Screenshots in the README.** They belong near the top, under the opening paragraphs and
   above "What it does". A tool whose whole value is visual currently shows none of it.
 
-### Next step
+### Next step — decide how the 2.9 GB sidecar reaches the user
 
-Freeze the sidecar with PyInstaller, then add its `externalBin` entry (see
-`src-tauri/binaries/README.md` — adding the entry *before* the binary exists fails every
-build, including dev). After that the app is installable end to end.
+The freeze works and is wired as a bundle resource, but **`npm run tauri build` has not been
+run to completion yet**, and that is the remaining unknown. NSIS is not comfortable at this
+size; the classic installer has a 2 GB ceiling and 2.9 GB of payload may not compress under
+it. Two ways out:
 
-Note for the freeze: `inference_server.py` derives `ROOT` from `__file__`, which becomes
-PyInstaller's temp extraction dir once frozen. It needs the model root passed in — and in a
-packaged build models live in app data while `embeddings.safetensors` ships in the resource
-dir, so the two can no longer be one root.
+1. **Ship it in the installer** (current config). Simplest if NSIS copes. Verify by running
+   a full bundle build and installing the result.
+2. **Download it on first run**, exactly like the models. `models.rs` already does resumable,
+   checksum-verified, cancellable downloads, so the sidecar would just be another manifest
+   entry. Installer stays ~20 MB; first-run download goes from 7.1 GB to ~10 GB. This also
+   matches §3's existing "do not ship the big things" principle.
+
+Option 2 is more consistent with how the rest of the app already works, but it is a real
+architecture decision rather than a detail, so it should be made deliberately.
 

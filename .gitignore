@@ -4,6 +4,11 @@ dist
 dist-ssr
 *.local
 
+# ── pyinstaller freeze ─────────────────────────────────────────────────
+# The frozen sidecar is several GB (torch + CUDA). Rebuild it with
+#   .venv/Scripts/pyinstaller.exe --noconfirm sidecar/phosphor-sidecar.spec
+build/
+
 # ── rust ──────────────────────────────────────────────────────────────────────
 src-tauri/target
 src-tauri/gen

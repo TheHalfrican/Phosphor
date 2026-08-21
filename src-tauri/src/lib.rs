@@ -67,9 +67,72 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 // Paths
 // ---------------------------------------------------------------------------------------
 
+/// Locate a binary bundled via `externalBin`.
+///
+/// Tauri strips the target triple and places these next to the app executable, but the
+/// exact directory has moved between versions and differs by bundler, so this tries the
+/// plausible locations and reports every one it looked at rather than failing with a
+/// bare "not found". Cheap, and it turns a packaging mistake into a legible error
+/// instead of a silent "sidecar not running".
+fn bundled_binary(app: &AppHandle, stem: &str) -> CmdResult<PathBuf> {
+    let name = format!("{stem}.exe");
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(&name));
+            candidates.push(dir.join("binaries").join(&name));
+        }
+    }
+    if let Ok(res) = app.path().resource_dir() {
+        candidates.push(res.join(&name));
+        candidates.push(res.join("binaries").join(&name));
+        // The frozen sidecar is a PyInstaller *directory* build, not a single file, so it
+        // ships as a resource folder rather than an externalBin. See the spec header in
+        // sidecar/phosphor-sidecar.spec for why onefile is not an option here.
+        candidates.push(res.join("sidecar").join(&name));
+    }
+
+    candidates
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .ok_or_else(|| {
+            let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
+            format!("bundled binary '{name}' not found. Looked in:\n  {}", tried.join("\n  "))
+        })
+}
+
+/// Where the sidecar should look for models and for the baked embeddings.
+///
+/// These are two different places once installed: models are downloaded to app data
+/// (7 GB, and they must survive an app update), while `embeddings.safetensors` ships in
+/// the app's resource directory. In dev both live in the repo.
+fn sidecar_roots(app: &AppHandle) -> CmdResult<(PathBuf, PathBuf)> {
+    if cfg!(debug_assertions) {
+        let root = project_root();
+        Ok((root.join("models"), root.join("assets")))
+    } else {
+        let models = models::data_root(app).map_err(err)?.join("models");
+        let assets = app.path().resource_dir().map_err(err)?.join("assets");
+        Ok((models, assets))
+    }
+}
+
 /// In dev we run the sidecar from source through the project venv; in release it is the
 /// frozen binary bundled as an externalBin.
+///
+/// Either way the roots are passed explicitly. The sidecar cannot derive them from
+/// `__file__` once frozen, because that points into PyInstaller's temp extraction dir.
 fn sidecar_command(app: &AppHandle) -> CmdResult<(PathBuf, Vec<String>)> {
+    let (models, assets) = sidecar_roots(app)?;
+    let roots = vec![
+        "--models".to_string(),
+        models.to_string_lossy().into_owned(),
+        "--assets".to_string(),
+        assets.to_string_lossy().into_owned(),
+    ];
+
     if cfg!(debug_assertions) {
         let root = project_root();
         let py = root.join(".venv").join("Scripts").join("python.exe");
@@ -77,15 +140,11 @@ fn sidecar_command(app: &AppHandle) -> CmdResult<(PathBuf, Vec<String>)> {
         if !py.exists() {
             return Err(format!("dev sidecar interpreter missing: {}", py.display()));
         }
-        Ok((py, vec![script.to_string_lossy().into()]))
+        let mut args = vec![script.to_string_lossy().into_owned()];
+        args.extend(roots);
+        Ok((py, args))
     } else {
-        let exe = app
-            .path()
-            .resource_dir()
-            .map_err(err)?
-            .join("binaries")
-            .join("phosphor-sidecar.exe");
-        Ok((exe, vec![]))
+        Ok((bundled_binary(app, "phosphor-sidecar")?, roots))
     }
 }
 
@@ -93,10 +152,7 @@ fn ffmpeg_path(app: &AppHandle) -> PathBuf {
     if cfg!(debug_assertions) {
         project_root().join("bin").join("ffmpeg.exe")
     } else {
-        app.path()
-            .resource_dir()
-            .map(|d| d.join("binaries").join("ffmpeg.exe"))
-            .unwrap_or_else(|_| PathBuf::from("ffmpeg.exe"))
+        bundled_binary(app, "ffmpeg").unwrap_or_else(|_| PathBuf::from("ffmpeg.exe"))
     }
 }
 

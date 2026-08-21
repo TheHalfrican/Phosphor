@@ -4,6 +4,15 @@ Phosphor sidecar — newline-delimited JSON over stdin/stdout (CLAUDE.md §2).
 Not HTTP: no port to conflict over, no socket bound on the user's machine, no firewall
 prompt on first run.
 
+Invocation:
+    python inference_server.py [--models DIR] [--assets DIR]
+
+    --models  directory holding wan-ti2v-5b-diffusers/, gguf/ and craft/
+    --assets  directory holding embeddings.safetensors
+
+    Both default to the repo layout when running from source. Both are REQUIRED when
+    frozen, because the two live in different places once installed (see _resolve_roots).
+
 Requests (one JSON object per line on stdin):
     {"op":"ping","id":"..."}
     {"op":"generate","id":"...","image":"...","preset":"ember_glow","guidance":2.0, ...}
@@ -39,8 +48,60 @@ import traceback
 _PROTOCOL = sys.stdout
 sys.stdout = sys.stderr
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+FROZEN = getattr(sys, "frozen", False)
+
+# Where our own bundled modules live. Frozen, that is PyInstaller's extraction dir; from
+# source, it is this file's directory. `vendor.craft` is imported off this.
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+
+def _resolve_roots(argv):
+    """Work out where the models and the baked assets live.
+
+    These are passed in rather than derived from `__file__`, for two reasons:
+
+    1. Frozen, `__file__` points into PyInstaller's temp extraction directory, which is
+       neither of these and disappears on exit.
+    2. In a packaged build they are not even under a common root. Models are downloaded
+       to the user's app data (they are 7 GB and must survive an app update), while
+       `embeddings.safetensors` ships inside the installed app's resource directory. A
+       single ROOT cannot name both.
+
+    Running from source, the repo layout is the obvious default, so dev usage is
+    unchanged: `python sidecar/inference_server.py` still works with no arguments.
+    """
+    models = assets = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        for flag, name in (("--models", "models"), ("--assets", "assets")):
+            if a == flag and i + 1 < len(argv):
+                if name == "models":
+                    models = argv[i + 1]
+                else:
+                    assets = argv[i + 1]
+                i += 1
+            elif a.startswith(flag + "="):
+                if name == "models":
+                    models = a.split("=", 1)[1]
+                else:
+                    assets = a.split("=", 1)[1]
+        i += 1
+
+    if FROZEN and not (models and assets):
+        # Refuse to guess. A frozen build that silently fell back to a path relative to
+        # the executable would fail much later, as a confusing model-load error.
+        raise SystemExit(
+            "phosphor-sidecar: --models and --assets are required when frozen"
+        )
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return (models or os.path.join(repo, "models"),
+            assets or os.path.join(repo, "assets"))
+
+
+MODELS_ROOT, ASSETS_ROOT = _resolve_roots(sys.argv[1:])
 
 
 def send(obj):
@@ -57,8 +118,8 @@ def log(msg):
 def main():
     from pipeline import PhosphorPipeline
 
-    pipe = PhosphorPipeline(ROOT)
-    log("ready")
+    pipe = PhosphorPipeline(MODELS_ROOT, ASSETS_ROOT)
+    log(f"ready (models={MODELS_ROOT}, assets={ASSETS_ROOT})")
 
     for line in sys.stdin:
         line = line.strip()

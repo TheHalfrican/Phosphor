@@ -47,12 +47,16 @@ class PhosphorPipeline:
     reloading per request would be a large fraction of total time for no benefit.
     """
 
-    def __init__(self, root):
-        self.root = root
-        self.model_dir = os.path.join(root, "models", "wan-ti2v-5b-diffusers")
-        self.gguf = os.path.join(root, "models", "gguf", "Wan2.2-TI2V-5B-Q6_K.gguf")
-        self.craft_weights = os.path.join(root, "models", "craft", "craft_mlt_25k.pth")
-        self.embeddings = os.path.join(root, "assets", "embeddings.safetensors")
+    def __init__(self, models_root, assets_root):
+        # Two roots, not one: once installed, models sit in the user's app data (7 GB,
+        # downloaded on first run, must survive an app update) while the baked embeddings
+        # ship inside the app's resource directory. See inference_server._resolve_roots.
+        self.models_root = models_root
+        self.assets_root = assets_root
+        self.model_dir = os.path.join(models_root, "wan-ti2v-5b-diffusers")
+        self.gguf = os.path.join(models_root, "gguf", "Wan2.2-TI2V-5B-Q6_K.gguf")
+        self.craft_weights = os.path.join(models_root, "craft", "craft_mlt_25k.pth")
+        self.embeddings = os.path.join(assets_root, "embeddings.safetensors")
         self._pipe = None
         self._craft = None
 
@@ -171,8 +175,8 @@ class PhosphorPipeline:
     def load_craft(self, log=print):
         if self._craft is not None:
             return self._craft
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        # sys.path is prepared at startup (inference_server.HERE) so this works both from
+        # source and frozen, and so PyInstaller can see the import during analysis.
         from vendor.craft import CRAFT
 
         log("loading CRAFT text detector")
