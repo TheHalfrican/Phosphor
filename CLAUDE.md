@@ -732,20 +732,36 @@ missing before it is worth pointing anyone at:
 - **Screenshots in the README.** They belong near the top, under the opening paragraphs and
   above "What it does". A tool whose whole value is visual currently shows none of it.
 
-### Next step — decide how the 2.9 GB sidecar reaches the user
+### Next step — the sidecar cannot ship inside the installer
 
-The freeze works and is wired as a bundle resource, but **`npm run tauri build` has not been
-run to completion yet**, and that is the remaining unknown. NSIS is not comfortable at this
-size; the classic installer has a 2 GB ceiling and 2.9 GB of payload may not compress under
-it. Two ways out:
+**Measured 2026-08-20, not predicted.** `npm run tauri build` compiles and links the app
+fine, then dies in the bundler:
 
-1. **Ship it in the installer** (current config). Simplest if NSIS copes. Verify by running
-   a full bundle build and installing the result.
-2. **Download it on first run**, exactly like the models. `models.rs` already does resumable,
-   checksum-verified, cancellable downloads, so the sidecar would just be another manifest
-   entry. Installer stays ~20 MB; first-run download goes from 7.1 GB to ~10 GB. This also
-   matches §3's existing "do not ship the big things" principle.
+```
+Running makensis to produce Phosphor_0.1.0_x64-setup.exe
+Internal compiler error #12345: error mmapping file (2102812255, 33554432) is out of range.
+```
 
-Option 2 is more consistent with how the rest of the app already works, but it is a real
-architecture decision rather than a detail, so it should be made deliberately.
+2,102,812,255 bytes is **1.96 GB** — the signed 32-bit boundary. NSIS cannot build an
+installer carrying the 2.88 GB freeze, full stop.
+
+**Switching to MSI does not help.** Tauri's `msi` target is WiX v3, which packs payload into
+CAB files, and CAB has the same 2 GB ceiling. Both Windows installer formats are bound by
+32-bit offsets. This is a payload problem, not a format problem.
+
+**Trimming under 2 GB is not the answer either.** The bulk is CUDA: cublasLt 478 MB,
+torch_cuda 410 MB, torch_cpu 305 MB, cufft 284 MB, cudnn_engines_precompiled 207 MB,
+cusparse 150 MB, cusolver 126 MB, cudnn_adv 107 MB. Dropping the ones this pipeline probably
+never calls (cufft, cusolver, cusparse, cudnn_adv) might save ~650 MB and land around
+2.2 GB — still over, and pruning CUDA libraries by guesswork is a classic source of
+failures that appear only on someone else's machine.
+
+**So: download the sidecar on first run, like the models.** `models.rs` already does
+resumable, checksum-verified, cancellable downloads, and `models.json` is already a
+manifest. The sidecar becomes another entry: zip `sidecar-dist/phosphor-sidecar/`, host it,
+add its SHA256. The installer drops to ~20 MB and first-run goes from 7.11 GB to ~10 GB.
+
+This is what §3 already says to do about big things, so it is a return to the design rather
+than a departure from it. It needs one new capability the downloader does not have yet:
+**unpacking an archive after verifying it.**
 

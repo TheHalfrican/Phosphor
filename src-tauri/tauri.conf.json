@@ -43,7 +43,7 @@
     ],
     "publisher": "The Halfrican Software",
     "copyright": "The Halfrican Software",
-    "category": "Graphics",
+    "category": "Graphics and Design",
     "shortDescription": "Animated game cover art generator",
     "longDescription": "Drop in a static game cover, get a seamlessly looping animated cover out. Runs entirely locally on your GPU.",
     "icon": [
