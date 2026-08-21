@@ -782,44 +782,62 @@ into the user's app data.
 The frozen sidecar therefore lives at `<appdata>/sidecar/phosphor-sidecar.exe`, not in the
 install directory, and `bundled_binary()` looks there.
 
-### The one thing left: upload the two archives
+### Sidecar hosting — published and verified 2026-08-21
 
-Hosting is **GitHub Releases**, split into two parts:
+Released at <https://github.com/TheHalfrican/Phosphor/releases/tag/v0.1.0>, marked
+**prerelease**: there is no distributed installer, so it must not read as "latest".
 
-| part | size | |
-|---|---|---|
-| `phosphor-sidecar-1of2.zip` | 1.06 GB (0.99 GiB) | |
-| `phosphor-sidecar-2of2.zip` | 1.00 GB (0.93 GiB) | |
+| asset | size |
+|---|---|
+| `phosphor-sidecar-1of2.zip` | 1.06 GB (0.99 GiB) |
+| `phosphor-sidecar-2of2.zip` | 1.00 GB (0.93 GiB) |
+
+**Verified against the live release**, not only in unit tests:
+
+```text
+cargo test --lib -- --ignored --nocapture downloads_and_unpacks_the_real_sidecar
+```
+
+pulls both parts from GitHub, checks both SHA256s, unpacks, writes markers, deletes the
+archives and reports the manifest complete. **119.8 s** for ~2 GB. Re-run it after any
+sidecar rebuild or re-upload.
+
+GitHub's asset CDN answers **206 Partial Content**, so the downloader's resume works against
+it. Worth confirming rather than assuming — resume is the only reason a 9.17 GB first run is
+tolerable.
 
 **Not Hugging Face**, despite the downloader already pointing there for models. HF's free
 public storage is "best-effort" and explicitly conditioned on uploads being "as useful to
-the community as possible" — meant for models and datasets. A PyInstaller bundle of torch
-and CUDA DLLs is a Windows application payload, not a community ML artifact, so hosting it
-there is outside what that storage is for.
+the community as possible": it is for models and datasets. A PyInstaller bundle of torch and
+CUDA DLLs is a Windows application payload, so hosting it there is outside what that storage
+is for.
 
-**Why two parts and not one.** GitHub caps a release asset at 2 GiB. The single archive was
-1.92 GiB — under the cap with ~83 MiB to spare, which one torch update would erase. Each
-part is a *complete, independent* zip rather than a byte-split, so the downloader verifies,
-resumes and retries each on its own; both declare `unpack_to: "sidecar"` and extract into
-the same directory. That needed no new code, only distinct keys, since the marker file is
-named per key. There is a test pinning exactly that.
+**Why two parts.** GitHub caps a release asset at 2 GiB; one archive was 1.92 GiB, leaving
+~83 MiB that a torch update would erase. Each part is a *complete, independent* zip rather
+than a byte-split, so the downloader verifies, resumes and retries each on its own. Both
+extract into the same directory, which needed no new code — marker files are named per key,
+and a test pins that one part landing does not mark the whole sidecar installed.
 
-Verified: the two parts reassemble to all 5838 files with matching sizes, and the seven
-largest binaries hash identically to the source tree.
+**`unpack_to` is `sidecar-runtime`, not `sidecar`.** In dev the download root is the repo,
+and `sidecar/` there is the Python *source* directory; unpacking 5838 frozen files over it
+would bury `inference_server.py` in its own build output.
 
-To publish:
+To republish after a rebuild:
 
 ```powershell
-./tools/build_sidecar.ps1                                        # -> sidecar-dist/phosphor-sidecar/
-.venv/Scripts/python.exe tools/package_sidecar.py --parts 2      # -> the zips + manifest entries
-gh release create v0.1.0 sidecar-dist/phosphor-sidecar-*of2.zip --title "..." --notes "..."
+./tools/build_sidecar.ps1                                     # -> sidecar-dist/phosphor-sidecar/
+.venv/Scripts/python.exe tools/package_sidecar.py --parts 2   # -> zips + manifest entries
+gh release upload v0.1.0 sidecar-dist/phosphor-sidecar-*of2.zip --clobber
 ```
 
-Until they are uploaded, first run fetches the models fine and then fails on the sidecar
-with a legible 404.
+**The freeze is not bit-reproducible**, so the hashes change even when the code does not.
+Paste the new entries from `sidecar-dist/manifest-entries.json` into `assets/models.json`,
+or first run fails its checksum for everyone.
 
-**Re-run `package_sidecar.py` and paste the new entries into `models.json` after any sidecar
-rebuild.** The freeze is not bit-reproducible, so the hashes change even when the code does
-not. `package_sidecar.py` writes them to `sidecar-dist/manifest-entries.json`, warns if a
-part crosses 2 GiB, and deletes stale archives so an old one cannot be uploaded by mistake.
+### Next step
 
+Install the built installer and run the app from a clean machine state. Everything upstream
+of that is verified; what has *not* been proven is the installed layout — that
+`bundled_binary()` finds ffmpeg where NSIS actually puts it, that the resource dir resolves,
+and that the first-run download lands the sidecar somewhere the app then launches it from.
+Those paths have only ever run in dev.

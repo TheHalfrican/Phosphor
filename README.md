@@ -106,8 +106,9 @@ The pipeline is proven end to end, cover in and seamless animated WebP out, meas
 1350×1800 on a 3:4 cover. The first-run model downloader is resumable, checksum-verified
 and cancellable.
 
-**Not yet packaged.** The Python sidecar still needs to be frozen with PyInstaller before
-there is an installer to hand anyone. Building from source works today.
+The Python sidecar is frozen, its runtime components are published, and the installer builds
+at 40 MB. **There is still no download link**, because the installed app has not been tested
+end to end yet. Building from source works today.
 
 A note on scope, so nobody wastes an evening: Phosphor targets **Windows with an NVIDIA GPU
 of roughly 10 GB or more**. AMD, Intel Arc, Apple silicon and smaller cards are not
