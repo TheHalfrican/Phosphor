@@ -16,7 +16,7 @@ and CUDA, and onefile re-extracts that to a temp directory on every single launc
 It ships as a bundle **resource** instead:
 
 ```jsonc
-"resources": { "../dist/phosphor-sidecar/": "sidecar/" }
+"resources": { "../sidecar-dist/phosphor-sidecar/": "sidecar/" }
 ```
 
 so it installs to `<resources>/sidecar/phosphor-sidecar.exe`. `bundled_binary()` in
@@ -25,10 +25,12 @@ so it installs to `<resources>/sidecar/phosphor-sidecar.exe`. `bundled_binary()`
 Rebuild it with:
 
 ```powershell
-.venv/Scripts/pyinstaller.exe --noconfirm sidecar/phosphor-sidecar.spec
+./tools/build_sidecar.ps1
 ```
 
-`dist/` and `build/` are gitignored. The freeze is reproducible from `setup.ps1` plus that
+Use that script rather than calling pyinstaller directly: its default output directory is
+`dist/`, which Vite empties on every `npm run build`. `sidecar-dist/` and `build/` are
+gitignored. The freeze is reproducible from `setup.ps1` plus that
 one command, so it is never committed.
 
 ## Two traps, both hit during scaffolding

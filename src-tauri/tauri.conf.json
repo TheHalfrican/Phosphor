@@ -60,7 +60,7 @@
       "../assets/presets.json": "assets/presets.json",
       "../assets/models.json": "assets/models.json",
       "../assets/embeddings.safetensors": "assets/embeddings.safetensors",
-      "../dist/phosphor-sidecar/": "sidecar/"
+      "../sidecar-dist/phosphor-sidecar/": "sidecar/"
     }
   }
 }

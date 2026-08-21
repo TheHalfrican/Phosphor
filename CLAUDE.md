@@ -647,7 +647,8 @@ warm** (vs §5's 63.3 s baseline) with an 8.5 s model load, so freezing costs no
 **Onedir, not onefile — and therefore not an `externalBin`.** The payload is ~2.9 GB of
 torch and CUDA. Onefile would re-extract all of it to temp on every launch; onedir starts in
 **1.2 s**. Tauri's `externalBin` takes single files only, so the sidecar ships as a bundle
-*resource* (`"../dist/phosphor-sidecar/": "sidecar/"`) and `bundled_binary()` resolves it.
+*resource* (`"../sidecar-dist/phosphor-sidecar/": "sidecar/"`), built by
+`tools/build_sidecar.ps1`, and `bundled_binary()` resolves it.
 Only ffmpeg remains an `externalBin`.
 
 **Two roots, not one.** `inference_server.py` used to derive `ROOT` from `__file__`, which

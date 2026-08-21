@@ -8,6 +8,8 @@ dist-ssr
 # The frozen sidecar is several GB (torch + CUDA). Rebuild it with
 #   .venv/Scripts/pyinstaller.exe --noconfirm sidecar/phosphor-sidecar.spec
 build/
+# PyInstaller output. NOT dist/ - that belongs to Vite, which empties it.
+sidecar-dist/
 
 # ── rust ──────────────────────────────────────────────────────────────────────
 src-tauri/target

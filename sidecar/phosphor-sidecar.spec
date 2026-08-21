@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for the Phosphor sidecar.
 
-Build from the repo root:
+Build from the repo root with:
 
-    .venv/Scripts/pyinstaller.exe --noconfirm sidecar/phosphor-sidecar.spec
+    ./tools/build_sidecar.ps1
 
-Output is `dist/phosphor-sidecar/` (a directory, not a single file) containing
+Output is `sidecar-dist/phosphor-sidecar/` (a directory, not a single file) containing
 `phosphor-sidecar.exe` plus `_internal/`.
+
+DO NOT run pyinstaller directly without `--distpath`. Its default output is `dist/`, which
+belongs to Vite: `npm run build` runs with emptyOutDir and silently deletes everything
+there. The failure surfaces much later, during the Tauri bundle step, as
+"resource path ..\dist\phosphor-sidecar doesn't exist", which points at the wrong cause.
 
 WHY ONEDIR AND NOT ONEFILE
 --------------------------
