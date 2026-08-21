@@ -23,6 +23,13 @@ from one master.
 The other half of the taskbar problem is size coverage. `tauri icon` emits 16/24/32/48/64
 and 256, so a display at 300% scaling - which wants roughly 96px - takes the 64 and scales
 it up. The sizes below include 96 and 128 so Windows has something close to land on.
+
+THE ICO ENTRIES ARE ORDERED LARGEST FIRST ON PURPOSE
+-----------------------------------------------------
+tauri-codegen builds the *window* icon by taking `icon_dir.entries()[0]` verbatim - the
+first entry in the file, not the best match. Sizes ascending would hand it the 16x16, which
+Windows then upscales to fill the taskbar button. Do not "tidy" this back into ascending
+order. See the comment at ico_sizes.
 """
 import struct
 from io import BytesIO
@@ -146,9 +153,18 @@ def main():
         render(size).save(ICONS / name)
         print(f"{name:18s}{size:5d}  {variant_for(size)}")
 
-    # 96 and 128 matter: a 300%-scaled taskbar asks for ~96px and would otherwise upscale
-    # the 64px entry.
-    ico_sizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
+    # LARGEST FIRST, and that order is load-bearing.
+    #
+    # tauri-codegen builds the *window* icon by reading icon.ico and taking
+    # `icon_dir.entries()[0]` verbatim - the first entry, not the best match
+    # (tauri-codegen/src/image.rs, CachedIcon::new_ico). With sizes ascending, entry 0 is
+    # 16x16, so the taskbar button gets a 16px image upscaled to ~96px on a 300% display.
+    # That is the "muddy taskbar icon, crisp context-menu icon" split: the context menu
+    # reads the exe's icon resource, where Windows picks the size itself.
+    #
+    # Windows scans the whole directory for a best match regardless of order, so leading
+    # with 256 costs nothing there and hands Tauri something worth downscaling.
+    ico_sizes = [256, 128, 96, 64, 48, 40, 32, 24, 20, 16]
     n = write_ico(ICONS / "icon.ico", ico_sizes)
     print(f"icon.ico          {n:5d} bytes  sizes {ico_sizes}")
 

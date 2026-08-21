@@ -732,10 +732,24 @@ is rendered from the variant intended for its size rather than resized from one 
 thin bars downscaled to 32px turn into grey mush, which is what a low-fidelity taskbar icon
 looks like.
 
-`icon.ico` carries 16/20/24/32/40/48/64/96/128/256. The 96 and 128 are the point: `tauri
-icon` stopped at 64 then jumped to 256, so a display at 300% scaling — which wants about
-96px — upscaled the 64px entry. Checked against Nocturne, Windows dark, Windows light and
-white grounds.
+`icon.ico` carries **256/128/96/64/48/40/32/24/20/16, largest first**, and both the sizes
+and the order matter.
+
+The sizes: `tauri icon` stopped at 64 and then jumped to 256, so a display at 300% scaling —
+which wants about 96px — upscaled the 64px entry.
+
+**The order is the one that actually caused the muddy taskbar icon.** `tauri-codegen` builds
+the *window* icon by taking `icon_dir.entries()[0]` verbatim, the first entry in the file
+rather than the best match (`tauri-codegen/src/image.rs`, `CachedIcon::new_ico`). Ascending
+sizes therefore handed it the **16×16**, which Windows upscaled to fill the taskbar button.
+Windows itself scans the whole directory and picks a best match regardless of order, so
+leading with 256 costs nothing and fixes Tauri.
+
+The tell that located it: the taskbar button looked muddy while the *context menu* icon at
+the same size looked sharp. Those come from different places — the context menu reads the
+exe's icon resource, where Windows chooses the size.
+
+Checked against Nocturne, Windows dark, Windows light and white grounds.
 
 ### The UI source
 
