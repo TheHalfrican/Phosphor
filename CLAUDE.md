@@ -720,17 +720,22 @@ made literal, since phosphor afterglow is a decay trail rather than a glow.
 needs no extra dependency, supersampled 4× because the mark is all diagonal edges.
 
 ```powershell
-.venv/Scripts/python.exe tools/make_icon.py            # -> src-tauri/icons/source.png
-npm run tauri icon src-tauri/icons/source.png          # -> the whole set
+.venv/Scripts/python.exe tools/make_icon.py    # writes every icon, icon.ico included
 ```
 
-`tauri icon` also emits `android/` and `ios/` directories. This is a Windows app; delete
-them, they are not referenced by `bundle.icon`.
+**Do not run `npm run tauri icon` after it.** That overwrites these with downscales of a
+single master and re-creates `android/` and `ios/` trees this app has no use for.
 
-The faint bars fall away first when the icon is scaled down, leaving the bright head and the
-card silhouette, which is roughly what the canvas' own 32px and 16px variants do by hand. So
-one master survives the downscale rather than needing per-size art. Checked against Nocturne,
-Windows dark, Windows light and white grounds.
+**The canvas draws 2a three times and all three are used.** Six bars at full size, three at
+32px, two at 16px, with the stroke and corner radius thickening at each step. Every ICO entry
+is rendered from the variant intended for its size rather than resized from one master; five
+thin bars downscaled to 32px turn into grey mush, which is what a low-fidelity taskbar icon
+looks like.
+
+`icon.ico` carries 16/20/24/32/40/48/64/96/128/256. The 96 and 128 are the point: `tauri
+icon` stopped at 64 then jumped to 256, so a display at 300% scaling — which wants about
+96px — upscaled the 64px entry. Checked against Nocturne, Windows dark, Windows light and
+white grounds.
 
 ### The UI source
 
