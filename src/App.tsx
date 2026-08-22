@@ -38,7 +38,13 @@ type ModelFile = {
   key: string; present: boolean; incomplete: boolean;
   bytes: number; partial: number; note: string;
 };
-type ModelStatus = { complete: boolean; missing_bytes: number; files: ModelFile[] };
+type ModelStatus = {
+  complete: boolean; missing_bytes: number; files: ModelFile[];
+  /* Set when the filesystem refused to answer for a path rather than saying "not there".
+     Without this the app reads a blocked junction as "your models are missing" and offers
+     to re-download 7 GB that is already on disk. */
+  unreadable: string | null;
+};
 
 /* Mirrors models::DownloadProgress. `file_received` is download bytes only — during the
    hash it stays pinned at the file's full size and `verify_frac` carries the position,
@@ -411,6 +417,9 @@ export default function App() {
        a panel that just asserts everything is fine: the rows reading "verified" ARE the
        evidence, and the only thing that has to change is which action is offered. */
     const ready = models.complete && !downloading;
+    /* A path Windows will not let us read. Downloading cannot fix it, so the download
+       action is withdrawn rather than left there to fail on the same path. */
+    const blocked = models.unreadable;
 
     return (
       <div className="ph-app">
@@ -418,9 +427,13 @@ export default function App() {
         <div className="ph-body">
           <div className="ph-setup">
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div className="ph-setuptitle">{ready ? "You’re all set" : "One-time setup"}</div>
+              <div className="ph-setuptitle">
+                {blocked ? "Phosphor cannot read its models folder" : ready ? "You’re all set" : "One-time setup"}
+              </div>
               <div className="ph-setupbody">
-                {ready ? (
+                {blocked ? (
+                  <>{blocked}</>
+                ) : ready ? (
                   <>
                     Everything Phosphor needs is on disk and checksum-verified,{" "}
                     {gb(models.files.reduce((s, f) => s + f.bytes, 0))} in total. Nothing
@@ -523,7 +536,7 @@ export default function App() {
                   onClick={() => { setCancelling(true); invoke("cancel_download"); }}>
                   {cancelling ? "Stopping…" : "Cancel"}
                 </button>
-              ) : ready ? (
+              ) : blocked ? null : ready ? (
                 /* There is nothing to download, so do not offer to. Pressing Download here
                    used to run a whole no-op pass over the manifest just to arrive at the
                    same place this goes directly. */
@@ -541,7 +554,7 @@ export default function App() {
                   {anyPartial ? "Resume download" : "Download"}
                 </button>
               )}
-              {!downloading && !ready && (
+              {!downloading && (!ready || blocked) && (
                 <button
                   className="btn btn-ghost"
                   style={{ fontSize: 12, padding: "6px 12px" }}
@@ -553,9 +566,11 @@ export default function App() {
               <span style={{ fontSize: 10.5, color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }}>
                 {downloading
                   ? "You can close this and pick up where you left off"
-                  : ready
-                    ? "starts the inference runtime"
-                    : "every file is checksum-verified"}
+                  : blocked
+                    ? "fix the folder, then press Check again"
+                    : ready
+                      ? "starts the inference runtime"
+                      : "every file is checksum-verified"}
               </span>
             </div>
             <Err />

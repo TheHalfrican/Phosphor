@@ -65,6 +65,35 @@ pub struct ModelStatus {
     pub complete: bool,
     pub missing_bytes: u64,
     pub files: Vec<FileStatus>,
+    /// Set when the filesystem refused to answer for a path, as opposed to answering "not
+    /// there". `status()` used to `.ok()` every metadata error, so a directory the process
+    /// was not allowed to read looked exactly like a directory that was empty, and the app
+    /// confidently offered to download files that were already on disk.
+    ///
+    /// See `explain_stat_error` for why this is worth a dedicated field.
+    pub unreadable: Option<String>,
+}
+
+/// Turn a failed `metadata()` into something worth showing a user, or `None` if it just
+/// means the file is not there yet.
+///
+/// **Windows error 448, `ERROR_UNTRUSTED_MOUNT_POINT`, is the one that matters here.**
+/// Windows 11's Redirection Guard refuses to let a process follow a junction or symlink
+/// that a non-administrator created, so a models directory that is really a link to
+/// somewhere else fails to traverse. Nothing in the message says "junction", and the
+/// app's own reading of it was worse than unhelpful: the files looked absent.
+fn explain_stat_error(path: &Path, e: &std::io::Error) -> Option<String> {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        return None;
+    }
+    let where_ = path.display();
+    match e.raw_os_error() {
+        Some(448) => Some(format!(
+            "Windows will not let Phosphor follow the link at {where_}. It is a junction or              symlink created by a standard user, and Windows 11 blocks those              (ERROR_UNTRUSTED_MOUNT_POINT). Replace it with a real folder, or recreate the              link from an elevated prompt."
+        )),
+        Some(5) => Some(format!("Phosphor is not allowed to read {where_} (access denied).")),
+        _ => Some(format!("Could not read {where_}: {e}")),
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -122,9 +151,22 @@ impl Manifest {
         let mut files = Vec::new();
         let mut missing_bytes = 0u64;
 
+        let mut unreadable: Option<String> = None;
+
         for f in &self.files {
             let p = root.join(&f.path);
-            let meta = std::fs::metadata(&p).ok();
+            let meta = match std::fs::metadata(&p) {
+                Ok(m) => Some(m),
+                Err(e) => {
+                    // "Not there" is ordinary and expected before a download. Anything else
+                    // is the filesystem refusing to answer, and reporting it as absence is
+                    // how a blocked junction became "your models are missing".
+                    if unreadable.is_none() {
+                        unreadable = explain_stat_error(&p, &e);
+                    }
+                    None
+                }
+            };
             let actual = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             // An unpacked entry is judged by its marker, not by the archive, which is
             // deleted once extracted.
@@ -155,9 +197,13 @@ impl Manifest {
         }
 
         ModelStatus {
-            complete: files.iter().all(|f| f.present),
+            // A path the filesystem refused to describe is not a complete install, even if
+            // every other file checks out. Saying "complete" there would send the user
+            // into a generate that cannot possibly work.
+            complete: unreadable.is_none() && files.iter().all(|f| f.present),
             missing_bytes,
             files,
+            unreadable,
         }
     }
 }
@@ -791,6 +837,40 @@ mod tests {
 
     fn manifest_of(files: Vec<ModelFile>) -> Manifest {
         Manifest { total_bytes: files.iter().map(|f| f.bytes).sum(), files }
+    }
+
+    /// A file that is simply absent is ordinary: report it missing and say nothing else.
+    /// The control for the test below.
+    #[test]
+    fn an_absent_file_is_missing_not_unreadable() {
+        let root = tmp_root("absent");
+        let st = manifest_of(vec![small_file()]).status(&root);
+        assert!(!st.complete);
+        assert!(!st.files[0].present);
+        assert_eq!(st.unreadable, None, "a plain absent file must not read as unreadable");
+    }
+
+    /// Windows 11 Redirection Guard answers **448** for a junction a standard user created,
+    /// and `status()` used to `.ok()` that into "the file is not there". The app then
+    /// offered to download models that were already on disk, and the download failed on the
+    /// same blocked path with a raw OS message.
+    ///
+    /// The error is synthesised rather than provoked: reproducing the real thing needs a
+    /// junction plus a process with the mitigation enabled, neither of which belongs in a
+    /// unit test. What is pinned is the decision, that a refusal is not an absence.
+    #[test]
+    fn a_refused_path_is_explained_rather_than_read_as_absence() {
+        let blocked = std::io::Error::from_raw_os_error(448);
+        let msg = explain_stat_error(Path::new("C:/models"), &blocked)
+            .expect("448 must be explained, not swallowed");
+        assert!(msg.contains("junction"), "should name the actual cause: {msg}");
+        assert!(msg.contains("elevated"), "should say what to do about it: {msg}");
+
+        let gone = std::io::Error::new(std::io::ErrorKind::NotFound, "nope");
+        assert_eq!(explain_stat_error(Path::new("x"), &gone), None, "absence stays absence");
+
+        let denied = std::io::Error::from_raw_os_error(5);
+        assert!(explain_stat_error(Path::new("x"), &denied).is_some(), "other refusals surface too");
     }
 
     #[test]

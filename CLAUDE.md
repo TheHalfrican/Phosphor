@@ -878,10 +878,43 @@ Two things found in passing that are worth knowing:
 The icon looked washed out on the pin, which was chased separately and **fixed the same
 day, but not by making it brighter**. See "The icon" below.
 
-**3. First-run setup errored on Download, then worked after a restart. FIXED 2026-08-21**,
-by inspection rather than by reproducing it.
+**3. First-run setup errored on Download. ROOT CAUSE FOUND 2026-08-21, and it was none of
+the three suspects.** The error text finally arrived from an install of 0.3.1:
 
-The second suspect was right. `download_models` set the `downloading` flag, then ran
+```
+i/o: The path cannot be traversed because it contains an untrusted mount point. (os error 448)
+```
+
+448 is `ERROR_UNTRUSTED_MOUNT_POINT`. **Windows 11's Redirection Guard refuses to let a
+process follow a junction or symlink created by a standard user.** The app data `models`
+directory on that machine was a junction to the repo's `models/`, created non-elevated, so
+the installed app could not traverse its own model path.
+
+The failure was then made much worse by the app itself. `status()` called `.ok()` on every
+`metadata()` error, so "Windows will not let me look" was recorded as **"the file is not
+there"**. That is why the setup screen appeared at all on a machine where every model was
+present, and why Download was offered: the app genuinely believed 7 GB was missing. Download
+then wrote through the same blocked path and surfaced the raw OS string.
+
+**Fixed by distinguishing a refusal from an absence.** `status()` now reports a
+non-`NotFound` error instead of swallowing it, `ModelStatus` carries `unreadable`, an
+install with an unreadable path is never called complete, and the setup screen shows a
+plain-English explanation naming junctions and withdraws Download, since downloading cannot
+fix a path that cannot be read. `explain_stat_error` special-cases 448 and access-denied.
+Two tests pin that absence stays absence and a refusal is explained.
+
+**Lesson worth keeping: `.ok()` on a `metadata()` call is a decision, not a tidy-up.** It
+says every possible failure means "not present", and that turned a diagnosable OS refusal
+into a confident wrong answer that cost a day.
+
+The machine was unblocked by replacing the junction with a real directory and copying the
+7.11 GB the runtime manifest lists out of the repo's larger dev set. Note `os.rmdir` removes
+a junction's reparse point without recursing into the target; a recursive delete there could
+have emptied the repo.
+
+### A real defect found while chasing it, fixed the same day
+
+Not the cause of the above, but genuine. `download_models` set the `downloading` flag, then ran
 `manifest_and_root(&app)?` **before** the line that cleared it:
 
 ```rust
@@ -901,12 +934,13 @@ The intent was written down correctly and the `?` escaped it. **A hand-cleared f
 guarantee.** It is now `DownloadGuard`, an RAII type that clears on drop, with tests covering
 both the leak and the concurrent-run case it was there for in the first place.
 
-**What is still not proven:** the flag only leaks *after* something else fails, and what made
-`manifest_and_root` fail that day is unknown. It reads `assets/models.json` from the resource
-dir, so a missing or unreadable resource is the candidate. Losing the error text cost that
-answer.
+This was committed as the fix for bug 3 before the error text arrived, on the strength of
+the symptom matching. It matched because "wedged until restart" is a shape several things
+can produce. **The lesson is the ordinary one: a hypothesis that explains the symptom is not
+the same as the cause, and the error text settles in one line what inspection cannot.**
 
-Two changes so a next time is not a dead end, both prompted by Noah:
+Two changes so a next time is not a dead end, both prompted by Noah, and both of which
+would have helped here:
 
 - **The setup screen now detects that everything is in place** and says so. When the manifest
   is complete it reads "You're all set", keeps the file rows (which showing "verified" is the
