@@ -1054,7 +1054,11 @@ build, install, download the runtime on first run, generate, protect text and ex
 | `Phosphor_<ver>_x64-setup.exe` (NSIS) | 41.0 MB | per-user, no elevation |
 | `Phosphor_<ver>_x64_en-US.msi` (WiX) | 53.4 MB | per-machine, wants admin, deployable by policy |
 
-**0.3.1 (2026-08-21)** is the current version. Over 0.3.0: a failed download no longer wedges
+**0.3.2 (2026-08-21)** is the current version. Over 0.3.1: a path the filesystem refuses to
+read is no longer reported as a missing file (§12 open bugs, 3). That is what made a machine
+with every model present ask to download 7 GB and then fail.
+
+**0.3.1** Over 0.3.0: a failed download no longer wedges
 the Download button until restart (§12 open bugs, 3), and the setup screen now recognises
 that everything is already in place and offers Continue instead of Download.
 
