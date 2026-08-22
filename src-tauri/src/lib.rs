@@ -48,6 +48,34 @@ pub struct AppState {
     downloading: Arc<AtomicBool>,
 }
 
+/// Holds `AppState::downloading` for as long as a run lasts, and clears it on drop.
+///
+/// **This exists because clearing it by hand did not survive contact with `?`.** The old
+/// code set the flag, then ran `manifest_and_root(&app)?` before the line that cleared it,
+/// so any failure there left the flag set for the life of the process. Every later Download
+/// click then returned "a download is already running", and only restarting the app cleared
+/// it, because that is what rebuilds `AppState`. That is the "first-run setup errored on
+/// Download, then worked after a restart" report in CLAUDE.md 12.
+///
+/// The point of an RAII guard here is not tidiness: it makes the early-return path
+/// impossible to get wrong, which is the mistake that was actually made.
+struct DownloadGuard(Arc<AtomicBool>);
+
+impl DownloadGuard {
+    /// `None` if a download is already in flight.
+    fn acquire(flag: &Arc<AtomicBool>) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| DownloadGuard(flag.clone()))
+    }
+}
+
+impl Drop for DownloadGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct GenerateOutput {
     pub frames_dir: String,
@@ -228,30 +256,23 @@ async fn download_models(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CmdResult<models::DownloadOutcome> {
-    if state
-        .downloading
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return Err("a download is already running".into());
-    }
+    let _guard = DownloadGuard::acquire(&state.downloading)
+        .ok_or_else(|| "a download is already running".to_string())?;
     state.cancel_download.store(false, Ordering::SeqCst);
 
+    // Everything below may fail with `?`. That is safe now only because `_guard` releases
+    // the flag when it drops; see DownloadGuard for what went wrong when it did not.
     let (manifest, root) = manifest_and_root(&app)?;
     let cancel = state.cancel_download.clone();
-    let downloading = state.downloading.clone();
 
     let emitter = app.clone();
     let sink: models::Sink = Arc::new(move |p| {
         let _ = emitter.emit("models://progress", p);
     });
 
-    let result = models::download_all(sink, &manifest, &root, cancel).await;
-
-    // Release the guard on every path, including the error one, or a single failed
-    // download would wedge the button for the rest of the session.
-    downloading.store(false, Ordering::SeqCst);
-    result.map_err(err)
+    models::download_all(sink, &manifest, &root, cancel)
+        .await
+        .map_err(err)
 }
 
 /// Ask the running download to stop. Returns immediately; the download command resolves
@@ -508,6 +529,45 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The download guard has to survive an early `?` return, which is exactly what it did
+    /// not do before. The old code cleared the flag on the last line of the happy path, so
+    /// a failure in `manifest_and_root` left it set and every later Download click answered
+    /// "a download is already running" until the app was restarted.
+    ///
+    /// This models that shape rather than the literal command, which needs an AppHandle:
+    /// acquire the guard, then fail with `?` before the end of the function.
+    #[test]
+    fn a_failed_run_releases_the_download_guard() {
+        let flag = Arc::new(AtomicBool::new(false));
+
+        fn run(flag: &Arc<AtomicBool>, fail: bool) -> Result<(), String> {
+            let _guard = DownloadGuard::acquire(flag).ok_or("a download is already running")?;
+            if fail {
+                // Stands in for `manifest_and_root(&app)?`.
+                return Err("manifest missing".into());
+            }
+            Ok(())
+        }
+
+        assert!(run(&flag, true).is_err(), "the run should have failed");
+        assert!(!flag.load(Ordering::SeqCst), "guard leaked after a failed run");
+
+        // The button must work again without restarting the app. This is the whole bug.
+        assert!(run(&flag, false).is_ok(), "a later run was wedged by the previous failure");
+        assert!(!flag.load(Ordering::SeqCst), "guard leaked after a successful run");
+    }
+
+    /// The guard still has to do its original job: two concurrent runs would interleave
+    /// writes into the same `.part` file.
+    #[test]
+    fn a_second_run_is_refused_while_one_is_in_flight() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let first = DownloadGuard::acquire(&flag).expect("first acquire");
+        assert!(DownloadGuard::acquire(&flag).is_none(), "two runs acquired at once");
+        drop(first);
+        assert!(DownloadGuard::acquire(&flag).is_some(), "guard not released on drop");
+    }
 
     /// The mask crosses from the webview as a data URL, but the sidecar opens it with PIL
     /// and needs a path. Passing the URL through produced

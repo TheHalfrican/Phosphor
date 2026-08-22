@@ -800,8 +800,8 @@ with PIL reporting every frame duration as 0.
 
 ### Open bugs — found installing 0.2.0, 2026-08-21
 
-Three things seen in the installed app, none of them blocking export. As of 2026-08-21
-**bug 1 is fixed** and **bug 2 turned out not to be a defect**; only 3 is still open.
+Three things seen in the installed app, none of them blocking export. **All three are closed
+as of 2026-08-21:** 1 and 3 were real defects and are fixed, 2 turned out not to be a defect.
 
 **1. A 2:3 cover is squashed horizontally in the mask editor. FIXED 2026-08-21.**
 
@@ -878,14 +878,50 @@ Two things found in passing that are worth knowing:
 The icon looked washed out on the pin, which was chased separately and **fixed the same
 day, but not by making it brighter**. See "The icon" below.
 
-**3. First-run setup errored on Download, then worked after a restart.** Error text was not
-captured, so this needs reproducing before it can be diagnosed. The installed app writes no
-log, which is itself part of the problem — `sidecar://log` and errors only go to the UI.
+**3. First-run setup errored on Download, then worked after a restart. FIXED 2026-08-21**,
+by inspection rather than by reproducing it.
 
-Suspects worth eliminating first: `model_status` was read at boot and the Download click acts
-on that snapshot, the `downloading` guard in `download_models`, and a partially-populated app
-data directory left by the previous install. When reproducing, capture the exact banner text;
-without it this is guesswork.
+The second suspect was right. `download_models` set the `downloading` flag, then ran
+`manifest_and_root(&app)?` **before** the line that cleared it:
+
+```rust
+if compare_exchange(false, true).is_err() { return Err("a download is already running") }
+let (manifest, root) = manifest_and_root(&app)?;   // early return, flag still set
+...
+downloading.store(false, Ordering::SeqCst);        // only reached on the happy path
+```
+
+So one failure there wedged the flag for the life of the process. Every later Download click
+answered "a download is already running", and only restarting cleared it, because that is
+what rebuilds `AppState`. Exactly the reported shape.
+
+The comment directly under that `store` said "Release the guard on every path, including the
+error one, or a single failed download would wedge the button for the rest of the session."
+The intent was written down correctly and the `?` escaped it. **A hand-cleared flag is not a
+guarantee.** It is now `DownloadGuard`, an RAII type that clears on drop, with tests covering
+both the leak and the concurrent-run case it was there for in the first place.
+
+**What is still not proven:** the flag only leaks *after* something else fails, and what made
+`manifest_and_root` fail that day is unknown. It reads `assets/models.json` from the resource
+dir, so a missing or unreadable resource is the candidate. Losing the error text cost that
+answer.
+
+Two changes so a next time is not a dead end, both prompted by Noah:
+
+- **The setup screen now detects that everything is in place** and says so. When the manifest
+  is complete it reads "You're all set", keeps the file rows (which showing "verified" is the
+  actual evidence), and offers **Continue** instead of Download. Pressing Download when there
+  was nothing to download used to run a whole no-op pass to arrive at the same place.
+- **A "Check again" button** re-reads status without restarting, and a sidecar that fails to
+  start now reports itself as a sidecar problem rather than as a download failure. That
+  conflation is why the original report pointed at the downloader.
+
+**The installed app still writes no log**, which is why this had to be solved by reading code.
+Worth fixing on its own merits.
+
+Noted while investigating: the installed app's `models` directory is a **junction to the
+repo's `models/`**, so that machine has never actually run a clean first-run download. Any
+future attempt to reproduce first-run behaviour there has to account for it.
 
 ### Known limitations, not bugs
 

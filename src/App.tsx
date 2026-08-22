@@ -161,6 +161,35 @@ export default function App() {
     return () => { un.then((f) => f()); };
   }, []);
 
+  /* Re-read what is actually on disk, and carry on if it is all there.
+     Without this the setup screen has exactly one way forward, the Download button, and
+     nothing to say when everything is already present. That is how a transient failure
+     turned into a dead end: the files were fine, the button was not. */
+  const [checking, setChecking] = useState(false);
+  async function recheck() {
+    setChecking(true);
+    setError("");
+    try {
+      setModels(await invoke<ModelStatus>("model_status"));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  /* Leave setup for the app proper. Separate from the download so a sidecar that fails to
+     start reports itself as a sidecar problem, not as a failed download. */
+  async function finishSetup() {
+    setError("");
+    try {
+      await invoke("start_sidecar");
+      setScreen("empty");
+    } catch (e) {
+      setError(`Everything is downloaded, but the inference runtime did not start: ${e}`);
+    }
+  }
+
   /* ── model download (§3) ──────────────────────────────────────────────────── */
   async function startDownload() {
     setError("");
@@ -181,8 +210,10 @@ export default function App() {
       const out = await invoke<DownloadOutcome>("download_models");
       setModels(out.status);
       if (out.status.complete) {
-        await invoke("start_sidecar");
-        setScreen("empty");
+        // Deliberately outside this try. `start_sidecar` failing is not a download
+        // failure, and reporting it as one is what made the original bug report point at
+        // the downloader for a day.
+        await finishSetup();
       }
       // Cancelled, or a file is still missing: stay put. Every byte already fetched is
       // kept in a .part file, so pressing Download again resumes rather than restarts.
@@ -376,6 +407,10 @@ export default function App() {
     const overall = dl && dl.total ? dl.received / dl.total : 0;
     const remaining = dl ? Math.max(0, dl.total - dl.received) : 0;
     const anyPartial = big.some((f) => !f.present && f.partial > 0);
+    /* Nothing left to fetch. The screen keeps its file rows rather than being replaced by
+       a panel that just asserts everything is fine: the rows reading "verified" ARE the
+       evidence, and the only thing that has to change is which action is offered. */
+    const ready = models.complete && !downloading;
 
     return (
       <div className="ph-app">
@@ -383,12 +418,22 @@ export default function App() {
         <div className="ph-body">
           <div className="ph-setup">
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div className="ph-setuptitle">One-time setup</div>
+              <div className="ph-setuptitle">{ready ? "You’re all set" : "One-time setup"}</div>
               <div className="ph-setupbody">
-                Phosphor runs entirely on your GPU. It needs to download its models and
-                inference runtime once, about{" "}
-                {gb(models.files.reduce((s, f) => s + f.bytes, 0))} in total. Nothing you
-                make ever leaves your machine.
+                {ready ? (
+                  <>
+                    Everything Phosphor needs is on disk and checksum-verified,{" "}
+                    {gb(models.files.reduce((s, f) => s + f.bytes, 0))} in total. Nothing
+                    left to download.
+                  </>
+                ) : (
+                  <>
+                    Phosphor runs entirely on your GPU. It needs to download its models and
+                    inference runtime once, about{" "}
+                    {gb(models.files.reduce((s, f) => s + f.bytes, 0))} in total. Nothing you
+                    make ever leaves your machine.
+                  </>
+                )}
               </div>
             </div>
 
@@ -478,6 +523,16 @@ export default function App() {
                   onClick={() => { setCancelling(true); invoke("cancel_download"); }}>
                   {cancelling ? "Stopping…" : "Cancel"}
                 </button>
+              ) : ready ? (
+                /* There is nothing to download, so do not offer to. Pressing Download here
+                   used to run a whole no-op pass over the manifest just to arrive at the
+                   same place this goes directly. */
+                <button
+                  className="btn btn-primary"
+                  style={{ fontSize: 12.5, padding: "7px 18px" }}
+                  onClick={finishSetup}>
+                  Continue
+                </button>
               ) : (
                 <button
                   className="btn btn-secondary"
@@ -486,10 +541,21 @@ export default function App() {
                   {anyPartial ? "Resume download" : "Download"}
                 </button>
               )}
+              {!downloading && !ready && (
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px" }}
+                  disabled={checking}
+                  onClick={recheck}>
+                  {checking ? "Checking…" : "Check again"}
+                </button>
+              )}
               <span style={{ fontSize: 10.5, color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }}>
                 {downloading
                   ? "You can close this and pick up where you left off"
-                  : "every file is checksum-verified"}
+                  : ready
+                    ? "starts the inference runtime"
+                    : "every file is checksum-verified"}
               </span>
             </div>
             <Err />
