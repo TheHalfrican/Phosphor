@@ -1020,7 +1020,11 @@ build, install, download the runtime on first run, generate, protect text and ex
 | `Phosphor_<ver>_x64-setup.exe` (NSIS) | 41.0 MB | per-user, no elevation |
 | `Phosphor_<ver>_x64_en-US.msi` (WiX) | 53.4 MB | per-machine, wants admin, deployable by policy |
 
-**0.3.0 (2026-08-21)** is the current version. Over 0.2.0: the mask editor no longer squashes
+**0.3.1 (2026-08-21)** is the current version. Over 0.3.0: a failed download no longer wedges
+the Download button until restart (§12 open bugs, 3), and the setup screen now recognises
+that everything is already in place and offers Continue instead of Download.
+
+**0.3.0** Over 0.2.0: the mask editor no longer squashes
 a 2:3 cover (§12 open bugs), export offers Full or Half with **Half as the default** (§7),
 a landscape window puts the controls beside the artwork (§7a), and the icon's decay ramp is
 lifted so its echoes are visible (§12 "The icon"). The Start Menu pin bug from 0.2.0 turned

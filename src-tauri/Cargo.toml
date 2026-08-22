@@ -1,6 +1,6 @@
 [package]
 name = "phosphor"
-version = "0.3.0"
+version = "0.3.1"
 description = "Animated game cover art generator"
 authors = ["The Halfrican Software"]
 edition = "2021"
